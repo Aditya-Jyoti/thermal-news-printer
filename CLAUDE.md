@@ -78,12 +78,14 @@ You are a testing QA sub-agent powered by Claude Haiku. Your job is to write tes
 * Purpose: To read full-length articles, view past news, and run the whole system on-device (fetch, summarize, render, print over BLE).
 * Theming: Material You. Must use dynamic colors extracted from the user's device wallpaper.
 * Feed UI: The feed shows ONLY the AI-curated edition: the stories that will be printed next (identical to the Print Preview) followed by previously printed editions — never the raw RSS firehose. News displayed in a Card format. Each card includes an image (if provided by RSS), the title, and a tag pill corresponding to its dynamically assigned category. Tapping a card opens the original article directly (in-app browser), no intermediate detail screen.
+* Summary Length: TL;DRs are short and to the point: 1–2 sentences, about 25–40 words, naming the concrete subject and the key fact.
 * Curation: One AI call ranks the recent unprinted candidates (title + short snippet) and picks the most interesting non-political stories; code then enforces per-category limits, the overall cap and dedup. Only the chosen stories are enriched and summarized (token- and battery-efficient).
 * Dynamic Source & Category Management: The app must provide an interface to dynamically add, edit, and remove RSS feed URLs. The user must also be able to dynamically create new categories and assign feeds to them.
 * Print Preview Pane: Implement a dedicated preview pane in the app that renders exactly how the current news will look on the 384px thermal paper. This is critical for tweaking fonts, borders, and lengths without wasting physical paper.
 * Configuration Options:
   * Schedules: Allow setting one or multiple print times per day; the app fires them with exact Android alarms and prints in the background.
-  * Category Limits: Allow the user to dynamically limit how many news items are printed per category (e.g., max 3 #products, max 1 #psychology).
+  * Category Limits: Allow the user to set a preferred number of news items per category (e.g., 3 #products, 1 #psychology). Limits are applied first; a limit of 0 excludes the category entirely.
+  * Edition Size: The "max items" setting is a guaranteed count — every edition MUST contain exactly that many stories whenever enough non-political, never-shown stories exist. If category limits leave slots empty, fill them with the next most interesting stories from any category (limit > 0), and widen the time window if needed.
 * History/Archive: A history section where the user can browse news that was summarized and printed previously, so nothing is lost if they didn't read the physical print immediately.
 
 ## Execution Plan
