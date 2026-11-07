@@ -6,6 +6,7 @@ import type { Category, Feed } from '@/api/types';
 import { timeAgo } from '@/lib/format';
 
 import { CategoryTag } from './CategoryTag';
+import { layout } from '@/theme/layout';
 
 interface Props {
   category: Category;
@@ -28,8 +29,8 @@ export function CategorySection(p: Props) {
       <View style={styles.header}>
         <CategoryTag category={c} />
         <View style={styles.actions}>
-          <IconButton icon="pencil-outline" size={20} onPress={p.onEditCategory} accessibilityLabel="Edit category" />
-          <IconButton icon="trash-can-outline" size={20} onPress={p.onDeleteCategory} accessibilityLabel="Delete category" />
+          <IconButton icon="pencil-outline" size={24} style={styles.touch} onPress={p.onEditCategory} accessibilityLabel="Edit category" />
+          <IconButton icon="trash-can-outline" size={24} style={styles.touch} onPress={p.onDeleteCategory} accessibilityLabel="Delete category" />
         </View>
       </View>
 
@@ -40,7 +41,8 @@ export function CategorySection(p: Props) {
         <IconButton
           mode="contained-tonal"
           icon="minus"
-          size={18}
+          size={24}
+          style={styles.touch}
           disabled={c.print_limit <= 0}
           onPress={() => p.onChangeLimit(c.print_limit - 1)}
           accessibilityLabel="Decrease limit"
@@ -51,7 +53,8 @@ export function CategorySection(p: Props) {
         <IconButton
           mode="contained-tonal"
           icon="plus"
-          size={18}
+          size={24}
+          style={styles.touch}
           disabled={c.print_limit >= 20}
           onPress={() => p.onChangeLimit(c.print_limit + 1)}
           accessibilityLabel="Increase limit"
@@ -89,7 +92,7 @@ export function CategorySection(p: Props) {
             right={() => (
               <View style={styles.feedActions}>
                 <Switch value={f.enabled} onValueChange={(v) => p.onToggleFeed(f, v)} />
-                <IconButton icon="trash-can-outline" size={20} onPress={() => p.onDeleteFeed(f)} accessibilityLabel="Delete feed" />
+                <IconButton icon="trash-can-outline" size={24} style={styles.touch} onPress={() => p.onDeleteFeed(f)} accessibilityLabel="Delete feed" />
               </View>
             )}
           />
@@ -103,14 +106,15 @@ export function CategorySection(p: Props) {
 }
 
 const styles = StyleSheet.create({
-  section: { borderRadius: 16, overflow: 'hidden', marginBottom: 16 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 16, paddingTop: 8 },
+  section: { borderRadius: 16, overflow: 'hidden', marginBottom: layout.cardGap },
+  touch: { width: layout.touch, height: layout.touch, margin: 0 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingLeft: 16, paddingTop: 4, minHeight: layout.touch },
   actions: { flexDirection: 'row' },
-  limitRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 16, paddingBottom: 4 },
+  limitRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: 16, paddingRight: 8, paddingBottom: 4 },
   limitLabel: { flex: 1 },
   limitValue: { minWidth: 28, textAlign: 'center' },
   feedActions: { flexDirection: 'row', alignItems: 'center' },
   dim: { opacity: 0.7 },
   empty: { padding: 16, opacity: 0.7 },
-  add: { alignSelf: 'flex-start', marginVertical: 4 },
+  add: { alignSelf: 'flex-start', marginHorizontal: 8, marginVertical: 8 },
 });

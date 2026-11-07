@@ -109,7 +109,7 @@ export function PrinterSettings({ selectedId, onSelect }: Props) {
 }
 
 const styles = StyleSheet.create({
-  box: { gap: 8 },
+  box: { gap: 12, paddingHorizontal: 16, paddingBottom: 8 },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   progress: { height: 6, borderRadius: 3 },
 });

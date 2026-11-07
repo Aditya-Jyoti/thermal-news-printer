@@ -29,6 +29,7 @@ import { Conflict, NotFound } from '../core/errors';
 import type { FetchLike } from '../core/http';
 import { runIngest } from '../core/ingest/service';
 import { buildEdition, getEdition } from '../core/edition';
+import { timed } from '../core/perf';
 import { buildDigest, runPrint } from '../core/pipeline';
 import { ApiError } from './errors';
 import type { Api, ModelOption } from './types';
@@ -159,7 +160,8 @@ export function createLocalApi(opts: LocalApiOptions = {}): Api {
     async previewImage() {
       try {
         const d = await db();
-        const rendered = await device().render(await buildDigest(d), { editionDate: new Date() });
+        const digest = await buildDigest(d);
+        const rendered = await timed('render.preview', () => device().render(digest, { editionDate: new Date() }));
         return { uri: `data:image/png;base64,${rendered.pngBase64}` };
       } catch {
         return null; // renderer unavailable: the Preview screen falls back to the in-app receipt mock

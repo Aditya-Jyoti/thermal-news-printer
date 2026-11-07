@@ -8,6 +8,7 @@ import type { Settings } from '@/api/types';
 import { ErrorView, LoadingView } from './common';
 import { ModelPicker } from './ModelPicker';
 import { useAppSettings } from '@/state/settings';
+import { layout } from '@/theme/layout';
 
 interface Handlers {
   onError: (e: unknown) => void;
@@ -39,11 +40,11 @@ function PrintingForm({ saved, onError, onSaved }: Handlers & { saved: Settings 
         <Text variant="bodyLarge" style={styles.grow}>
           Max items per print
         </Text>
-        <IconButton mode="contained-tonal" icon="minus" size={18} disabled={max <= 1} onPress={() => setMax(max - 1)} />
+        <IconButton mode="contained-tonal" icon="minus" size={24} style={styles.touch} disabled={max <= 1} onPress={() => setMax(max - 1)} />
         <Text variant="titleMedium" style={styles.value}>
           {max}
         </Text>
-        <IconButton mode="contained-tonal" icon="plus" size={18} disabled={max >= 30} onPress={() => setMax(max + 1)} />
+        <IconButton mode="contained-tonal" icon="plus" size={24} style={styles.touch} disabled={max >= 30} onPress={() => setMax(max + 1)} />
       </View>
       {models.isLoading ? (
         <LoadingView />
@@ -86,4 +87,5 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
   grow: { flex: 1 },
   value: { minWidth: 28, textAlign: 'center' },
+  touch: { width: layout.touch, height: layout.touch, margin: 0 },
 });

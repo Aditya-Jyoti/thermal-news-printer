@@ -11,6 +11,7 @@ import { ScheduleList } from '@/components/ScheduleList';
 import { SchedulerStatus } from '@/components/SchedulerStatus';
 import { errorMessage } from '@/lib/format';
 import { useAppSettings } from '@/state/settings';
+import { layout } from '@/theme/layout';
 
 export default function SettingsScreen() {
   const printNow = usePrintNow();
@@ -65,7 +66,7 @@ export default function SettingsScreen() {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   scroll: { paddingBottom: 48 },
-  print: { padding: 16 },
+  print: { padding: layout.gutter, paddingTop: 12 },
   div: { marginVertical: 12 },
 });
 

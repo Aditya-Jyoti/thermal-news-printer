@@ -70,3 +70,7 @@ warnings with fix buttons (exact alarms, notifications, battery optimisation) an
 starts the same foreground service + headless task immediately. `POST_NOTIFICATIONS` is requested when a schedule is
 created or enabled (Android 13+).
 
+
+## AI-curated edition (feed = preview = print)
+
+`core/edition.ts`: `curateEdition` sends the recent unprinted non-political candidates (cap 60, `id | #category | title | ~220 chars`) in ONE OpenRouter call and gets `{"picks":[...],"political":[...]}`; code then applies per-category limits, `max_items_total`, printed exclusion and near-duplicate removal on the AI order (deterministic newest-first fallback without key/on failure). The result is persisted in `edition_items` (schema v2, setting `edition_built_at`); only those stories are enriched and summarized (concurrency 3). Feed, Preview and `runPrint` all read this table; a successful print clears it and builds the next edition. `buildEdition` is single-flight per database. Pipeline progress reaches the UI through `core/events.ts` (query invalidation, no polling). Cards open the original article via `expo-web-browser`.
