@@ -15,8 +15,7 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "usesCleartextTraffic": true
+      "predictiveBackGestureEnabled": false
     },
     "plugins": [
       "expo-router",
@@ -29,6 +28,7 @@
         }
       ],
       "expo-image",
+      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }],
       "@react-native-community/datetimepicker"
     ],
     "experiments": {

@@ -10,6 +10,7 @@
     "@tanstack/react-query": "^5.107.1",
     "eslint-config-expo": "~58.0.4",
     "expo": "~58.0.23",
+    "expo-build-properties": "~58.0.12",
     "expo-constants": "~58.0.15",
     "expo-font": "~58.0.11",
     "expo-image": "~58.0.18",
@@ -38,10 +39,20 @@
   },
   "scripts": {
     "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint"
   },
-  "private": true
+  "private": true,
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-render-html",
+          "@pchmn/expo-material3-theme"
+        ]
+      }
+    }
+  }
 }
