@@ -97,8 +97,8 @@ def test_sprite_frames_are_well_formed_and_vary():
         assert all(len(r) == sprites.W for r in rows), name
     assert len({tuple(f) for f in sprites.FRAMES.values()}) == len(sprites.FRAMES)
     assert sprites.frame_for_tag("products") != sprites.frame_for_tag("engineering")
-    assert sprites.frame_for_tag("unknown-tag") == "idle"
-    assert sprites.sprite_image("idle").size == sprites.SIZE
+    assert sprites.frame_for_tag("unknown-tag") == "read"
+    assert sprites.sprite_image("read").size == sprites.SIZE
 
 
 def test_margin_has_ink_for_every_item():
@@ -111,3 +111,23 @@ def test_margin_has_ink_for_every_item():
 @pytest.mark.parametrize("slug", ["products", "engineering", "psychology", "learning", "custom"])
 def test_every_tag_renders(slug):
     assert _render([_item(0, slug=slug)]).width == 384
+
+
+def test_newsie_frames_and_walk_cycle():
+    assert len(sprites.WALK_CYCLE) >= 3
+    assert len({tuple(sprites.FRAMES[n]) for n in sprites.WALK_CYCLE}) == len(sprites.WALK_CYCLE)
+    assert all(n in sprites.FRAMES for n in ("wave", "read", "surprised", "thinking", "tinker"))
+    assert sprites.frame_for_tag("products") == "surprised"
+    assert sprites.frame_for_tag("psychology") == sprites.frame_for_tag("learning") == "thinking"
+    assert sprites.frame_for_tag("engineering") == "tinker"
+
+
+def test_sprite_art_is_pure_one_bit():
+    # shading is a regular checker pattern, never grey / error-diffused speckle
+    lum = sprites.sprite_image("read").getchannel(0)
+    assert set(lum.getdata()) <= {0, 255}
+
+
+def test_body_text_is_ragged_right():
+    # left-aligned: lines are drawn as whole strings, so word gaps are one normal space
+    assert "justify" not in inspect.getsource(render.render_receipt) or "justify=False" in inspect.getsource(render.render_receipt)

@@ -1,11 +1,11 @@
 """384px-wide, 1-bit newspaper receipt renderer.
 
 Layout: masthead + dateline across the full width, then a narrow left margin column holding
-a flipbook of "Whiskers" the cat reporter (see sprites.py) and a text column with, per item,
+a flipbook of a little newsie (paperboy) mascot (see sprites.py) and a text column with, per item,
 a plain-text `#tag` line and the TL;DR in a serif face. Titles are never printed.
 
 Text and rules are drawn on a grayscale canvas and hard-thresholded (crisp glyphs); the
-margin sprites live on a separate canvas and are Floyd-Steinberg dithered; the two are merged
+margin sprites live on a separate canvas and hold bold solid art plus a checker-shaded satchel; the two are merged
 into the final 1-bit image.
 """
 from __future__ import annotations
@@ -182,12 +182,12 @@ def _ordinal_date(dt: datetime) -> str:
     return f"{dt.strftime('%A')}, {dt.strftime('%B')} {dt.day}, {dt.year}"
 
 
-def _reaction_plan(slug: str, slot_idx: int, n_slots: int, rng: random.Random) -> str:
+def _reaction_plan(slug: str, slot_idx: int, offset: int) -> str:
     """Frame for the `slot_idx`-th sprite slot of an item: reaction first, then walk/read."""
     if slot_idx == 0:
         return sprites.frame_for_tag(slug)
-    cycle = ["read", "walk_a", "walk_b", "walk_a"]
-    return cycle[(slot_idx - 1 + rng.randrange(2)) % len(cycle)] if slot_idx < n_slots else "idle"
+    cycle = sprites.WALK_CYCLE
+    return cycle[(slot_idx - 1 + offset) % len(cycle)]
 
 
 def render_receipt(
@@ -253,12 +253,16 @@ def render_receipt(
     slot_h = sprites.SIZE[1] + 4
     sprite_slots: list[tuple[int, str, int]] = []  # (y, frame, x offset)
 
+    walk_step = [rng.randrange(len(sprites.WALK_CYCLE))]
+
     def place_slots(top: int, height_px: int, slug: str) -> None:
         n = max(1, height_px // slot_h)
         step = height_px / n
         for k in range(n):
-            frame = _reaction_plan(slug, k, n, rng)
-            xoff = {"walk_a": 0, "walk_b": 3}.get(frame, rng.randrange(0, 3))
+            frame = _reaction_plan(slug, k, walk_step[0])
+            if k > 0:
+                walk_step[0] += 1  # walk cycle advances down the whole page
+            xoff = rng.randrange(0, 3)
             sprite_slots.append((round(top + k * step + (step - sprites.SIZE[1]) / 2), frame, xoff))
 
     if not ordered:
@@ -273,7 +277,7 @@ def render_receipt(
             d.text((TEXT_X, y), f"#{it.category_slug}", font=tag_font, fill=0)
             y += 24
             for j, line in enumerate(ls):
-                _draw_line(d, TEXT_X, y, line, body_font, TEXT_W, justify=j < len(ls) - 1)
+                _draw_line(d, TEXT_X, y, line, body_font, TEXT_W, justify=False)
                 y += LEADING
             y += 12
             place_slots(block_top, y - block_top, it.category_slug)
@@ -293,7 +297,7 @@ def render_receipt(
     fy += 24
     _ornament(d, fy, TEXT_X + 10, TEXT_R - 10)
     fy += 12
-    _centered(d, fy, "That's all, folks!", small_it, TEXT_X, TEXT_R)
+    _centered(d, fy, "That's all for today!", small_it, TEXT_X, TEXT_R)
     fy += 20
     _centered(d, fy, "Full stories in the app", small, TEXT_X, TEXT_R)
     sprite_slots.append((wave_y, "wave", 0))
@@ -306,7 +310,7 @@ def render_receipt(
         pos = (PAD + xoff, sy)
         art.paste(sp.getchannel(0), pos, sp.getchannel(1))
         art_alpha.paste(sp.getchannel(1), pos)
-    art_1 = art.convert("1", dither=Image.FLOYDSTEINBERG)
+    art_1 = art.point(lambda v: 0 if v < 128 else 255).convert("1", dither=Image.NONE)
     text_1 = mask.convert("1", dither=Image.NONE)
     out = ImageChops.darker(art_1, text_1)
     return out.convert("1", dither=Image.NONE)
