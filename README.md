@@ -11,9 +11,8 @@ caught your eye later.
 
 Everything runs **on your Android phone**. You don't need a server.
 
-> **Status:** active development. The phone-only app (Phase 6) runs on the phone today. Real-world testing of
-> on-phone Bluetooth printing and scheduled prints is in progress. The Python implementation in `backend/` is the
-> reference the app was ported from. See [Status](#status).
+The `backend/` folder holds an optional Python implementation of the same pipeline, the reference the app was
+ported from. It is useful on a Linux machine or Raspberry Pi, but the app never needs it.
 
 ---
 
@@ -273,7 +272,7 @@ Troubleshooting:
 5. **Settings → Print schedule:** fix any warnings (exact alarms, notifications, battery) and try **Run schedule now (test)**.
 
 ### Optional: the Python backend
-The original implementation still works on any Linux machine with Bluetooth (including a Raspberry Pi):
+The Python reference implementation runs the same pipeline on any Linux machine with Bluetooth, including a Raspberry Pi:
 ```bash
 cd backend
 uv sync
@@ -306,16 +305,21 @@ docs/
   sample_receipt.png
 ```
 
-## Status
-- ✅ Phone-only app: on-device SQLite, feed fetching, AI summaries with fallback (thinking disabled), Skia receipt
-  renderer, BLE driver (byte-identical to the reference protocol) with flow control and darkness presets,
-  exact-alarm scheduled prints, AI-curated editions of a guaranteed size (Feed = Preview = what prints), read/unread,
-  Fetch new news, History grouped by day, Diagnostics, Material You UI. App test suite: 259 tests.
-- ✅ Verified on real hardware: printing from the phone to an SC03h (OnePlus, Android 16).
-- 🧪 Still being tuned on hardware: print evenness and darkness, the right-edge margin, and scheduled prints in Doze.
-- ✅ Python reference backend: ingest, enrichment, summaries, dedup, renderer, BLE printing from Linux (raw ATT for
-  dual-mode printers), REST API and scheduler. 360 tests. The receipt layout (no edition row, right margin) and the
-  edition rules have since moved ahead in the app.
+## Features
+- **Runs entirely on the phone:** SQLite storage, feed fetching with full-text extraction, AI curation and
+  summaries via OpenRouter (thinking disabled, automatic model fallback), Skia receipt rendering, Bluetooth printing
+  and exact-alarm scheduled prints. No server.
+- **Editions:** a guaranteed number of stories, balanced across categories and feeds, at most a few days old,
+  never repeated. Feed, Preview and the printer all use the same edition.
+- **Reading:** read/unread state, **Fetch new news**, History grouped by day, and tapping a card opens the
+  original article.
+- **Printing:** a byte-exact implementation of the catprinter protocol with flow control, darkness presets,
+  a right-edge safe margin, plus darkness-sample and evenness test prints.
+- **Diagnostics:** per-feed health with stale-feed detection, the last error at each step, and an OpenRouter key test.
+- **Tests:** 267 tests for the app (`cd mobile && npx jest`) and 360 for the Python backend (`cd backend && uv run pytest -q`).
+
+**Tested hardware:** SC03h cat printer with a OnePlus phone on Android 16. Other printers using the same protocol
+(GB01, GB02, GT01, MX05 and similar) should work.
 
 ## Credits
 - **[rbaron/catprinter](https://github.com/rbaron/catprinter)** by rbaron (MIT): the reverse-engineered BLE
