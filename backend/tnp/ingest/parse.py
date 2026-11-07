@@ -31,14 +31,20 @@ def compute_fingerprint(url: str | None, title: str) -> str:
     return hashlib.sha256(basis.encode("utf-8")).hexdigest()
 
 
+_BLOCK_TAGS = ["p", "div", "li", "br", "blockquote", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "pre"]
+
+
 def html_to_text(html: str | None) -> str | None:
     if not html:
         return None
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style"]):
         tag.decompose()
-    text = re.sub(r"[ \t\r\f\v]+", " ", soup.get_text("\n"))
-    text = re.sub(r"\n\s*\n+", "\n\n", text).strip()
+    for tag in soup.find_all(_BLOCK_TAGS):
+        tag.append("\n\n" if tag.name != "br" else "\n")
+    text = re.sub(r"[ \t\r\f\v]+", " ", soup.get_text(""))
+    text = re.sub(r" ?\n ?", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text).strip()
     return text or None
 
 
