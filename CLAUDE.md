@@ -7,6 +7,11 @@ The goal of termal-news-printer is to create an automated, dual-medium daily new
 
 The system will curate news from user-defined RSS feeds, use an AI via OpenRouter to summarize them into punchy, bite-sized TL;DRs, and automatically print a visually appealing, newspaper-styled receipt using a reverse-engineered BLE thermal cat printer. A companion React Native mobile app will act as the digital counterpart and control center, holding the full-length articles so the user can read the complete stories later, view print history, and manage settings like print schedules, limits, custom categories, and RSS sources.
 
+## Deployment Model: Phone-Only (No Server)
+* The user has no server. Everything runs inside the React Native app on the phone: RSS fetching, full-text extraction, OpenRouter summarization, the SQLite database (dedup/history), receipt rendering, BLE printing and scheduled prints.
+* The Python code in backend/ is the reference implementation (rules, prompts, layout, print protocol). Port its behaviour to TypeScript; do not require it at runtime.
+* The OpenRouter API key is entered in the app and stored with expo-secure-store; never commit or log it.
+
 ## Sub-Agent Architecture & Setup
 You are the Orchestrator. You must NOT write the bulk of the code yourself. You will delegate coding to sonnet-worker and testing to haiku-tester.
 
@@ -62,7 +67,7 @@ You are a testing QA sub-agent powered by Claude Haiku. Your job is to write tes
 * AI Integration: Use the OpenAI API format configured to point to OpenRouter. Default to a lightweight, fast, and token-efficient model that benchmarks well for summarization, such as google/gemma-3-12b-it (default), with deepseek/deepseek-v4.1-flash as the automatic fallback and an alternative selectable in the app.
 * Deduplication: The system must track what has already been printed. The news aggregated for the physical print must NEVER be the same as the last time it printed.
 
-## Thermal Print Image Constraints (Backend)
+## Thermal Print Image Constraints
 * Hardware integration: Use the reverse-engineered protocol at https://github.com/rbaron/catprinter to send the print commands over BLE.
 * Image Dimensions: The generated image must be exactly 384px wide (approx. 48mm / 203 dpi). Length is dynamic based on content.
 * Visual Constraints: 1-bit monochrome (Black & White).
@@ -70,13 +75,13 @@ You are a testing QA sub-agent powered by Claude Haiku. Your job is to write tes
 * No Characters or Sprites: The print is text only. Do NOT add characters, sprites, margin animations or decorative illustrations; they waste print space. Use the full 384px width for text.
 
 ## React Native App Constraints (Frontend & Control Center)
-* Purpose: To read full-length articles, view past news, and control the thermal printer backend.
+* Purpose: To read full-length articles, view past news, and run the whole system on-device (fetch, summarize, render, print over BLE).
 * Theming: Material You. Must use dynamic colors extracted from the user's device wallpaper.
 * Feed UI: News displayed in a Card format. Each card includes an image (if provided by RSS), the title, and a tag pill corresponding to its dynamically assigned category.
 * Dynamic Source & Category Management: The app must provide an interface to dynamically add, edit, and remove RSS feed URLs. The user must also be able to dynamically create new categories and assign feeds to them.
 * Print Preview Pane: Implement a dedicated preview pane in the app that renders exactly how the current news will look on the 384px thermal paper. This is critical for tweaking fonts, borders, and lengths without wasting physical paper.
 * Configuration Options:
-  * Schedules: Allow setting one or multiple print times per day via a cron-like scheduler managed by the app.
+  * Schedules: Allow setting one or multiple print times per day; the app fires them with exact Android alarms and prints in the background.
   * Category Limits: Allow the user to dynamically limit how many news items are printed per category (e.g., max 3 #products, max 1 #psychology).
 * History/Archive: A history section where the user can browse news that was summarized and printed previously, so nothing is lost if they didn't read the physical print immediately.
 
@@ -86,5 +91,6 @@ You are a testing QA sub-agent powered by Claude Haiku. Your job is to write tes
 3. Phase 3: Thermal Print Generator: Delegate to sonnet-worker to build the 384px Pillow (Python) canvas using newspaper styling, apply the newspaper typography (text only, crisp 1-bit), and link the BLE print protocol.
 4. Phase 4: Mobile App & Configurator: Delegate to sonnet-worker to scaffold the React Native app, implement Material You theming, the card feed, the History section, Source/Category management, and the Configuration settings (print limits, schedule).
 5. Phase 5: Print Preview & Integration: Tie the digital app and physical print backend together, ensuring the Print Preview pane accurately reflects the Pillow output and app settings dictate the backend cron jobs and feed sources.
+6. Phase 6: Phone-Only: Move everything into the app (no server). Order: BLE printing from the phone, on-device content pipeline (RSS, full text, OpenRouter, SQLite), on-device 384px receipt rendering, then exact-alarm scheduled prints.
 
 Your first action: Confirm you understand the project goal of termal-news-printer, set up the agent files in .claude/agents/, and initialize the Git repository.
