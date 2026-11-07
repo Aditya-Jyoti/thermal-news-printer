@@ -119,3 +119,20 @@ Base URL configurable in the app (default `http://<lan-ip>:8000`). JSON everywhe
 | `POST /print` | | `PrintRecord` (builds the digest, renders, prints over BLE). 409 `Nothing new to print` when the digest is empty; 502 (`print <id> failed: ...`) when printing fails (the failed print is still recorded) |
 
 Errors: `{"detail": "<message>"}` with 4xx/5xx. CORS: allow all origins.
+
+## TL;DR quality pipeline
+- **Full-text enrichment** (`tnp/ingest/enrich.py`, `fulltext.py`): in `process_pending`, only for the articles
+  about to be summarized, a `content_text` shorter than 1500 chars triggers a fetch of the article URL
+  (httpx, 15s timeout, 3 MB cap, trafilatura extraction, max 4 concurrent). If the extracted text is >= 1.3x
+  and >= 300 chars longer, it is stored with `db.update_article_content(conn, id, content_text, content_html)`
+  (so the app's article view gets the full story too). Any failure silently keeps the RSS text.
+- **Input cleanup** (`tnp/ai/clean.py`): newsletter/podcast boilerplate lines are stripped and the body is
+  bounded to 12000 chars, cut at a paragraph boundary.
+- **Prompt** (`tnp/ai/summarize.py`): 2-3 sentences, ~45-70 words, <= 450 chars, subject named explicitly,
+  banned filler list, two few-shot examples. `quality_issues()` flags TL;DRs under 25 words (unless the
+  input is a short teaser), filler phrases or questions; one stricter retry on the same model is made and
+  the better answer kept (the fallback model is still used only on `AIError`).
+- **Eval CLI**: `uv run python -m tnp.ai.eval [--n 8] [--per-category 2] [--model M]` prints feed, title,
+  input chars before/after enrichment, the TL;DR, word count and flags (needs `OPENROUTER_API_KEY`;
+  `--enrich-only` needs none). Run `python -m tnp.pipeline ingest` first. Enrichment results are saved to
+  the DB; summaries are not.
