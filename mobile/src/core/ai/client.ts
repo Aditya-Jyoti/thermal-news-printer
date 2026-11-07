@@ -1,13 +1,29 @@
 import { defaultFetch, fetchWithTimeout, type FetchLike } from '../http';
+import { redact } from '../redact';
 
 export const DEFAULT_BASE_URL = 'https://openrouter.ai/api/v1';
 export const TIMEOUT_MS = 30_000;
 export const MAX_RETRIES = 3;
+/** Reasoning models spend hidden tokens first; a small cap leaves them with an empty answer. */
+export const MIN_MAX_TOKENS = 2048;
+/** Non-reasoning model used when the configured fallback is missing or identical to the primary. */
+export const SAFE_FALLBACK_MODEL = 'google/gemma-3-12b-it';
+
+/** Distinct models in order; a fallback equal to the primary is pointless, so use the safe model instead. */
+export function withSafeFallback(models: (string | null | undefined)[]): string[] {
+  const given = models.filter((m): m is string => !!m);
+  const ordered = [...new Set(given)];
+  if (ordered.length === 1 && given.length > 1 && ordered[0] !== SAFE_FALLBACK_MODEL) ordered.push(SAFE_FALLBACK_MODEL);
+  return ordered;
+}
 
 export class AIError extends Error {
-  constructor(message: string) {
+  /** HTTP status of the failing call, when there was one. */
+  status?: number;
+  constructor(message: string, status?: number) {
     super(message);
     this.name = 'AIError';
+    this.status = status;
   }
 }
 
@@ -67,10 +83,13 @@ export function createAiClient(cfg: AiClientConfig): AiClient {
         model,
         // Some models (e.g. Gemma) reject a system role; a single user message is universally safe.
         messages: [{ role: 'user', content: `${system}\n\n---\n\n${user}` }],
-        max_tokens: maxTokens,
+        max_tokens: Math.max(maxTokens, MIN_MAX_TOKENS),
+        // OpenRouter's unified switch: no thinking, just a normal answer. Ignored by non-reasoning models.
+        reasoning: { enabled: false },
         temperature,
       });
       let lastErr = 'unknown error';
+      let lastStatus: number | undefined;
       for (let attempt = 0; attempt <= retries; attempt++) {
         if (attempt > 0) await sleep(Math.min(8000, 500 * 2 ** (attempt - 1)));
         let res: Response;
@@ -91,32 +110,56 @@ export function createAiClient(cfg: AiClientConfig): AiClient {
             cfg.timeoutMs ?? TIMEOUT_MS,
           );
         } catch (e) {
-          lastErr = e instanceof Error ? e.message : String(e);
+          lastErr = redact(e instanceof Error ? e.message : String(e), [cfg.apiKey]);
+          console.warn(`[ai] model=${model} request failed: ${lastErr.slice(0, 200)}`);
           continue; // connection error / timeout: retry
         }
         if (!res.ok) {
-          lastErr = `HTTP ${res.status}`;
-          if (RETRYABLE(res.status)) continue;
+          let raw = '';
+          try {
+            raw = await res.text();
+          } catch {
+            // unreadable body
+          }
           let detail = '';
           try {
-            const j = (await res.json()) as { error?: { message?: string } };
+            const j = JSON.parse(raw) as { error?: { message?: string } };
             detail = j.error?.message ? `: ${String(j.error.message).slice(0, 200)}` : '';
           } catch {
             // non-JSON error body
           }
-          throw new AIError(`model call failed: HTTP ${res.status}${detail}`);
+          detail = redact(detail, [cfg.apiKey]);
+          console.warn(`[ai] model=${model} HTTP ${res.status} body=${redact(raw, [cfg.apiKey]).replace(/\s+/g, ' ').slice(0, 200)}`);
+          lastErr = `HTTP ${res.status}${detail}`;
+          lastStatus = res.status;
+          if (RETRYABLE(res.status)) continue;
+          throw new AIError(`model call failed: HTTP ${res.status}${detail}`, res.status);
         }
         let text = '';
+        let reasoned = false;
+        let finish = '';
         try {
-          const j = (await res.json()) as { choices?: { message?: { content?: unknown } }[] };
-          text = contentText(j.choices?.[0]?.message?.content);
+          const j = (await res.json()) as {
+            choices?: { finish_reason?: string; message?: { content?: unknown; reasoning?: unknown; reasoning_details?: unknown } }[];
+          };
+          const msg = j.choices?.[0]?.message;
+          text = contentText(msg?.content);
+          finish = j.choices?.[0]?.finish_reason ?? '';
+          reasoned = !!msg?.reasoning || (Array.isArray(msg?.reasoning_details) && msg.reasoning_details.length > 0);
         } catch (e) {
+          console.warn(`[ai] model=${model} unexpected response shape`);
           throw new AIError(`unexpected response shape: ${e instanceof Error ? e.message : String(e)}`);
         }
-        if (!text.trim()) throw new AIError('empty model response');
+        if (!text.trim()) {
+          console.warn(`[ai] model=${model} empty model response finish_reason=${finish}`);
+          if (reasoned || finish === 'length') {
+            throw new AIError(`model returned no answer (reasoning used the token budget; finish_reason=${finish || 'unknown'})`);
+          }
+          throw new AIError('empty model response');
+        }
         return text;
       }
-      throw new AIError(`model call failed: ${lastErr}`);
+      throw new AIError(`model call failed: ${lastErr}`, lastStatus);
     },
   };
 }
@@ -129,7 +172,7 @@ export async function tryModels<R>(
   models: (string | null | undefined)[],
   attempt: (model: string) => Promise<R>,
 ): Promise<R> {
-  const ordered = [...new Set(models.filter((m): m is string => !!m))];
+  const ordered = withSafeFallback(models);
   if (ordered.length === 0) throw new AIError('no model configured');
   let last: AIError | null = null;
   for (const model of ordered) {
@@ -138,7 +181,7 @@ export async function tryModels<R>(
     } catch (e) {
       if (e instanceof AIUnavailable) throw e;
       if (e instanceof AIError) {
-        last = e;
+        last = new AIError(`${model}: ${e.message}`, e.status);
         continue;
       }
       throw e;

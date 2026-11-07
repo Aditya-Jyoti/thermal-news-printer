@@ -56,10 +56,16 @@ const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', '
 /** RFC 822 / ISO 8601 date parsing that does not depend on engine quirks. */
 export function parseDate(raw: string | null | undefined): Date | null {
   if (!raw) return null;
-  const s = raw.trim();
-  const iso = Date.parse(s);
-  if (!Number.isNaN(iso) && /^\d{4}-\d{2}-\d{2}/.test(s)) return new Date(iso);
-  const m = /^(?:[A-Za-z]{3,9},?\s+)?(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([A-Za-z]{1,5}|[+-]\d{4})?$/.exec(s);
+  let s = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+    // ISO 8601. A date-time without any zone is taken as UTC (engines would guess local time).
+    if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}/.test(s) && !/(?:Z|z|[+-]\d{2}(?::?\d{2})?)$/.test(s.slice(10))) s += 'Z';
+    s = s.replace(/^(\d{4}-\d{2}-\d{2}) (?=\d)/, '$1T');
+    const t = Date.parse(s);
+    return Number.isNaN(t) ? null : new Date(t);
+  }
+  const m =
+    /^(?:[A-Za-z]{3,9},?\s+)?(\d{1,2})\s+([A-Za-z]{3,9})\.?\s+(\d{2,4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([A-Za-z]{1,5}|[+-]\d{2}:?\d{2})?$/.exec(s);
   if (m) {
     const mon = MONTHS.indexOf(m[2].slice(0, 3).toLowerCase());
     if (mon >= 0) {
@@ -67,17 +73,19 @@ export function parseDate(raw: string | null | undefined): Date | null {
       if (m[3].length === 2) year += year < 70 ? 2000 : 1900;
       let offset = 0;
       const tz = m[7];
-      if (tz && /^[+-]\d{4}$/.test(tz)) {
-        offset = (tz[0] === '-' ? -1 : 1) * (parseInt(tz.slice(1, 3), 10) * 60 + parseInt(tz.slice(3), 10));
+      if (tz && /^[+-]\d{2}:?\d{2}$/.test(tz)) {
+        const d = tz.replace(':', '');
+        offset = (d[0] === '-' ? -1 : 1) * (parseInt(d.slice(1, 3), 10) * 60 + parseInt(d.slice(3), 10));
       } else if (tz) {
         const named: Record<string, number> = { EST: -300, EDT: -240, CST: -360, CDT: -300, MST: -420, MDT: -360, PST: -480, PDT: -420 };
-        offset = named[tz.toUpperCase()] ?? 0;
+        offset = named[tz.toUpperCase()] ?? 0; // GMT, UT, Z and unknown zones: UTC
       }
       const t = Date.UTC(year, mon, parseInt(m[1], 10), parseInt(m[4], 10), parseInt(m[5], 10), parseInt(m[6] ?? '0', 10));
       return new Date(t - offset * 60_000);
     }
   }
-  return Number.isNaN(iso) ? null : new Date(iso);
+  const t = Date.parse(s);
+  return Number.isNaN(t) ? null : new Date(t);
 }
 
 function pickLink(entry: Node): string {

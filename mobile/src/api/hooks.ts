@@ -3,6 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApi } from './provider';
 import type {
   CategoryCreate,
+  Edition,
+  HistoryEdition,
   CategoryUpdate,
   FeedCreate,
   FeedUpdate,
@@ -16,6 +18,8 @@ export const keys = {
   feeds: ['feeds'] as const,
   edition: ['edition'] as const,
   prints: ['prints'] as const,
+  history: ['history'] as const,
+  diagnostics: ['diagnostics'] as const,
   schedules: ['schedules'] as const,
   settings: ['settings'] as const,
   models: ['models'] as const,
@@ -41,6 +45,17 @@ export const useEdition = () => {
 export const usePrints = (limit = 50) => {
   const api = useApi();
   return useQuery({ queryKey: [...keys.prints, limit], queryFn: () => api.listPrints(limit, 0), staleTime: 60_000 });
+};
+
+/** Archived editions (printed or rolled over), newest first. Kept fresh by 'history' pipeline events. */
+export const useHistory = (limit = 60) => {
+  const api = useApi();
+  return useQuery({ queryKey: [...keys.history, limit], queryFn: () => api.listHistory(limit), staleTime: 60_000 });
+};
+
+export const useDiagnostics = () => {
+  const api = useApi();
+  return useQuery({ queryKey: keys.diagnostics, queryFn: () => api.getDiagnostics(), retry: false, staleTime: 5_000 });
 };
 
 export const useSchedules = () => {
@@ -104,6 +119,36 @@ export const useRefreshFeeds = () => {
   return useInvalidating((feedId?: number | null) => api.refreshFeeds(feedId), [keys.feeds, keys.edition]);
 };
 
+/** Mark read/unread; the card flips immediately (optimistic), events refresh the lists afterwards. */
+export const useSetRead = () => {
+  const api = useApi();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { articleId: number; read: boolean }) => api.setRead(v.articleId, v.read),
+    onMutate: ({ articleId, read }) => {
+      const at = read ? new Date().toISOString() : null;
+      qc.setQueryData<Edition>(keys.edition, (ed) =>
+        ed ? { ...ed, items: ed.items.map((i) => (i.article_id === articleId ? { ...i, read_at: at } : i)) } : ed,
+      );
+      qc.setQueriesData<HistoryEdition[]>({ queryKey: keys.history }, (h) =>
+        h?.map((e) => ({ ...e, items: e.items.map((i) => (i.article_id === articleId ? { ...i, read_at: at } : i)) })),
+      );
+    },
+    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: keys.edition }), qc.invalidateQueries({ queryKey: keys.history })]),
+  });
+};
+
+/** "Fetch new news": archive the current edition, ingest, curate a fresh one. */
+export const useFetchNews = () => {
+  const api = useApi();
+  return useInvalidating(() => api.fetchNews(), [keys.feeds, keys.edition, keys.history]);
+};
+
+export const useTestAiKey = () => {
+  const api = useApi();
+  return useInvalidating(() => api.testAiKey(), [keys.diagnostics]);
+};
+
 export const useRebuildEdition = () => {
   const api = useApi();
   return useInvalidating(() => api.rebuildEdition(), [keys.edition]);
@@ -129,5 +174,5 @@ export const usePatchSettings = () => {
 
 export const usePrintNow = () => {
   const api = useApi();
-  return useInvalidating(() => api.printNow(), [keys.prints, keys.edition]);
+  return useInvalidating(() => api.printNow(), [keys.prints, keys.edition, keys.history]);
 };

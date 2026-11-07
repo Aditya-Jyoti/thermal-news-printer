@@ -125,7 +125,7 @@ describe('curateEdition', () => {
     const a = await seed();
     const b = await seed();
     const pol = await seed();
-    const old = await seed({ ageDays: 9 });
+    const old = await seed({ ageDays: 30 });
     const printed = await seed();
     await createPrint(db, 'manual', [{ article_id: printed, position: 1, category_slug: 'products', tldr: 't' }]);
     const client = ai(() => picks([b, a], [pol]));

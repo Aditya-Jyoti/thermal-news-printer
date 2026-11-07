@@ -3,7 +3,8 @@ import type { DigestItem, Edition, IngestResult, PrintRecord, PrintTrigger } fro
 import { getDevice, type DeviceServices } from '../device/contracts';
 import type { AiClient } from './ai/client';
 import type { Db } from './db/adapter';
-import { clearEdition, listEditionItems } from './db/edition';
+import { archiveEdition, listEditionItems } from './db/edition';
+import { clearError, recordError } from './diagnostics';
 import { createPrint, getPrint, setPrintStatus } from './db/prints';
 import { getSettings } from './db/settings';
 import { buildEdition } from './edition';
@@ -42,22 +43,29 @@ export async function runPrint(db: Db, trigger: PrintTrigger, deps: PrintDeps = 
   const digest = await buildDigest(db);
   if (digest.length === 0) return null;
   const pid = await createPrint(db, trigger, digest);
+  let stage: 'render' | 'print' = 'render';
   try {
     const device = deps.device ?? getDevice();
     const settings = await getSettings(db);
     const rendered = await device.render(digest, { editionDate: deps.now ?? new Date(), issueNo: pid });
+    await clearError(db, 'render');
     try {
       await (deps.savePng ?? savePrintPng)(pid, rendered.pngBase64);
     } catch {
       // history image is a nicety; never block printing on it
     }
+    stage = 'print';
     await device.printer.print(rendered.bitmap, { deviceId: settings.printer_address ?? undefined });
     await setPrintStatus(db, pid, 'printed');
-    // Printed stories are consumed: clear the edition and curate the next one in the background.
-    await clearEdition(db);
+    await clearError(db, 'print');
+    // Printed stories move to History (status "Printed"); the next edition is curated in the background.
+    await archiveEdition(db, { printId: pid, onlyArticleIds: new Set(digest.map((d) => d.article_id)) });
     emit('edition');
+    emit('history');
     void buildEdition(db, { client: deps.client, fetch: deps.fetch }).catch(() => undefined);
   } catch (e) {
+    console.warn(`[${stage}] failed: ${errText(e)}`);
+    await recordError(db, stage, `${stage === 'render' ? 'Rendering' : 'Printing'} failed: ${errText(e)}`);
     await setPrintStatus(db, pid, 'failed', errText(e)); // the edition is kept for a retry
   }
   emit('prints');

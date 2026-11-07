@@ -3,6 +3,7 @@ import { insertArticle } from '../db/articles';
 import type { Db } from '../db/adapter';
 import { getFeedRow, listFeedRows, recordFeedFetch, type FeedRow } from '../db/catalog';
 import { defaultFetch, fetchWithTimeout, USER_AGENT, type FetchLike } from '../http';
+import { clearError, recordError } from '../diagnostics';
 import { emit } from '../events';
 import { mapLimit, timed, yieldToUi } from '../perf';
 import { htmlToText } from './html';
@@ -146,6 +147,14 @@ export async function runIngest(
       await recordFeedFetch(db, feed.id, { error: msg });
     }
     await yieldToUi();
+  }
+  const failed = Object.entries(result.errors);
+  if (failed.length > 0) {
+    const [url, msg] = failed[0];
+    console.warn(`[ingest] ${failed.length} of ${result.feeds_checked} feeds failed; first: ${url} ${msg.slice(0, 200)}`);
+    await recordError(db, 'ingest', `${failed.length} of ${result.feeds_checked} feeds failed. ${url}: ${msg}`);
+  } else {
+    await clearError(db, 'ingest');
   }
   if (result.new_articles > 0) emit('feeds');
   return result;

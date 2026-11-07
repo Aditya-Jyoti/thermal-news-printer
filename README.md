@@ -142,9 +142,9 @@ React Native (Expo, TypeScript) with **Material You** theming that takes its col
 
 | Tab | What it does |
 |---|---|
-| **Feed** | The next edition (exactly what will print), then past printed editions. Cards show image, title and category tag; tap opens the original article in an in-app browser; pull to refresh |
+| **Feed** | The next edition (exactly what will print) with unread dots and per-card Mark as read/unread. **Fetch new news** moves the current stories to History, then fetches and curates a fresh edition; pull to refresh only checks for updates. Header shows "N of max stories · N unread" |
 | **Preview** | The exact 384px receipt for the next edition |
-| **History** | Every past print and its stories, so nothing is lost if you didn't read the paper |
+| **History** | Archived editions (printed or rolled over by Fetch new news) grouped by day in collapsible sections (Today / Yesterday / date) with Printed / Not printed chips and read/unread cards |
 | **Sources** | Add, edit and remove feeds and categories, and set per-category print limits |
 | **Settings** | Print times and scheduled-printing status, models, OpenRouter key, printer pairing and test print, Print now, data source |
 
@@ -274,7 +274,7 @@ docs/
 ## Status
 - ✅ Phone-only app: on-device SQLite, feed fetching, AI summaries with fallback, Skia receipt renderer
   (pixel-matches the Python output), BLE driver (byte-identical to the reference protocol), exact-alarm scheduled
-  prints, AI-curated editions (Feed = Preview = what prints), Material You UI. App test suite: 201 tests.
+  prints, AI-curated editions (Feed = Preview = what prints), Material You UI. App test suite: 222 tests.
 - 🧪 Being verified on real hardware: Bluetooth printing from the phone and scheduled prints in Doze (OnePlus, Android 16).
 - ✅ Python reference backend: ingest, enrichment, summaries, dedup, renderer, BLE printing from Linux (raw ATT for
   dual-mode printers), REST API and scheduler. 359 tests.

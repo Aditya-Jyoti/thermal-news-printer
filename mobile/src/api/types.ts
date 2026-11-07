@@ -142,6 +142,8 @@ export interface EditionItem {
   published_at: string | null;
   /** null while the summary is still being written. */
   tldr: string | null;
+  /** ISO timestamp when the user read it (opened the original or marked it), else null. */
+  read_at: string | null;
 }
 
 export type EditionPhase = 'idle' | 'curating' | 'summarizing';
@@ -153,12 +155,66 @@ export interface EditionStatus {
   total: number;
   /** No OpenRouter key: the edition is a plain newest-first selection and cannot be summarized. */
   no_key: boolean;
+  /** Most recent pipeline failure (redacted), so a blank edition is never unexplained. */
+  last_error?: { stage: PipelineStage; message: string; at?: string };
 }
+
+export type PipelineStage = 'ingest' | 'curate' | 'summarize' | 'render' | 'print';
+export type LastErrors = Partial<Record<PipelineStage, { message: string; at: string }>>;
 
 export interface Edition {
   items: EditionItem[];
   status: EditionStatus;
   built_at: string | null;
+  /** max_items_total from the settings: the size the edition aims for. */
+  target: number;
+}
+
+/** One story of an archived edition (History). */
+export interface HistoryItem {
+  position: number;
+  article_id: number | null;
+  category_slug: string;
+  category: Category | null;
+  title: string | null;
+  url: string | null;
+  image_url: string | null;
+  tldr: string | null;
+  read_at: string | null;
+}
+
+/** An edition moved to History: printed (print_id set) or just shown and rolled over by "Fetch new news". */
+export interface HistoryEdition {
+  id: number;
+  created_at: string;
+  archived_at: string;
+  print_id: number | null;
+  printed: boolean;
+  items: HistoryItem[];
+}
+
+export interface FetchNewsResult {
+  ingest: IngestResult;
+  edition: Edition;
+}
+
+export interface Diagnostics {
+  /** Configuration hints, e.g. a useless fallback model. */
+  hints?: string[];
+  last_errors: LastErrors;
+  counts: {
+    articles: number;
+    /** curation candidates inside the age window. */
+    candidates: number;
+    edition_size: number;
+    summarized: number;
+  };
+}
+
+export interface AiKeyTestResult {
+  ok: boolean;
+  /** One entry per model tried (primary, then fallback). */
+  results: { model: string; ok: boolean; message: string; status?: number }[];
 }
 
 /** Full surface of the REST contract (docs/ARCHITECTURE.md). */
@@ -193,4 +249,16 @@ export interface Api {
    */
   previewImage(): Promise<{ uri: string } | null>;
   printNow(): Promise<PrintRecord>;
+  /** Archived editions (printed or rolled over), newest first, with their stories: one query. */
+  listHistory(limit?: number): Promise<HistoryEdition[]>;
+  /** Mark an article read / unread. */
+  setRead(articleId: number, read: boolean): Promise<void>;
+  /**
+   * "Fetch new news": archive the current edition into History, ingest the feeds, then start curating a
+   * fresh edition (summaries continue in the background).
+   */
+  fetchNews(): Promise<FetchNewsResult>;
+  getDiagnostics(): Promise<Diagnostics>;
+  /** One tiny request (max_tokens 5) with the configured model and fallback. */
+  testAiKey(): Promise<AiKeyTestResult>;
 }
