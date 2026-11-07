@@ -8,6 +8,8 @@ import { STAGE_LABEL } from '@/core/diagnostics';
 import { errorMessage } from '@/lib/format';
 import { layout } from '@/theme/layout';
 
+const hostOf = (url: string) => url.replace(/^https?:\/\//, '').split('/')[0];
+
 const STAGES: PipelineStage[] = ['ingest', 'curate', 'summarize', 'render', 'print'];
 
 /** Last error per pipeline stage, article/edition counts and a one-tap OpenRouter key test. */
@@ -29,13 +31,24 @@ export function DiagnosticsSection() {
           </Text>
           {d.window_days !== undefined ? (
             <Text variant="bodySmall" style={muted}>
-              Window used: {d.window_days === null ? 'no limit' : `${d.window_days} days`}
+              Max story age: {d.window_days === null ? 'no limit' : `${d.window_days} days`}
             </Text>
           ) : null}
           {(d.categories ?? []).map((c) => (
             <Text key={c.slug} variant="bodySmall" style={muted}>
               #{c.slug}: {c.fetched} fetched · {c.eligible} eligible · {c.in_edition} in edition
             </Text>
+          ))}
+          {(d.feeds ?? []).map((f) => (
+            <View key={f.id}>
+              <Text variant="bodySmall" numberOfLines={1} style={f.last_error || f.stale ? { color: theme.colors.error } : muted}>
+                {f.title || hostOf(f.url)} (#{f.category_slug}){f.enabled ? '' : ' · disabled'}{f.stale ? ' · STALE' : ''}
+              </Text>
+              <Text variant="bodySmall" style={muted}>
+                {f.fresh_items} fresh · {f.total_items} total · fetched {f.last_fetched_at ? new Date(f.last_fetched_at).toLocaleString() : 'never'}
+                {f.last_error ? ` · ${f.last_error.slice(0, 80)}` : ''}
+              </Text>
+            </View>
           ))}
           {(d.hints ?? []).map((h) => (
             <Text key={h} variant="bodySmall" style={{ color: theme.colors.tertiary }}>

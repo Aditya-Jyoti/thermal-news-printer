@@ -168,6 +168,9 @@ export function createLocalApi(opts: LocalApiOptions = {}): Api {
         if (b.max_items_total != null && (!Number.isInteger(b.max_items_total) || b.max_items_total < 1 || b.max_items_total > 30)) {
           throw new ApiError(422, 'max_items_total must be between 1 and 30');
         }
+        if (b.max_age_days != null && (!Number.isInteger(b.max_age_days) || b.max_age_days < 1 || b.max_age_days > 14)) {
+          throw new ApiError(422, 'max_age_days must be between 1 and 14');
+        }
         return updateSettings(d, b);
       }),
     getModels: async () => SUPPORTED_MODELS,

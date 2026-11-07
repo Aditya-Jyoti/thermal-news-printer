@@ -86,6 +86,11 @@ export function CategorySection(p: Props) {
                     Fetched {timeAgo(f.last_fetched_at)}
                   </Text>
                 ) : null}
+                {f.stale ? (
+                  <Text variant="bodySmall" style={{ color: theme.colors.tertiary }}>
+                    Stale: newest story {timeAgo(f.newest_at ?? '')}
+                  </Text>
+                ) : null}
               </View>
             )}
             onPress={() => p.onEditFeed(f)}

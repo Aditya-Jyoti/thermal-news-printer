@@ -11,3 +11,9 @@ export function toIso(v: Date | string | null | undefined): string | null {
   const d = v instanceof Date ? v : new Date(v);
   return Number.isNaN(d.getTime()) ? null : isoSeconds(d);
 }
+
+/** A feed is stale when its newest story is older than this. */
+export const STALE_FEED_DAYS = 30;
+
+export const isStale = (newestAt: string | null, now: Date = new Date()): boolean =>
+  newestAt !== null && new Date(newestAt).getTime() < now.getTime() - STALE_FEED_DAYS * 86_400_000;

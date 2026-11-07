@@ -9,13 +9,12 @@ import { AIError, AIUnavailable, createAiClient, SAFE_FALLBACK_MODEL, withSafeFa
 import { clearError, getLastErrors, pickLastError, recordError } from './diagnostics';
 import { summarize } from './ai/summarize';
 import type { Db } from './db/adapter';
-import { countArticles, countByCategory, getPrintedArticleIds, listCurationCandidates, setPoliticalMany, upsertSummary, type CandidateRow } from './db/articles';
+import { countArticles, countByCategory, feedDiagnostics, getPrintedArticleIds, listCurationCandidates, setPoliticalMany, upsertSummary, type CandidateRow } from './db/articles';
 import { listCategories } from './db/catalog';
 import { archiveEdition, clearEdition, countEditionSummarized, getEditionBuiltAt, hasArticlesSince, listEditionItems, replaceEdition } from './db/edition';
 import { getLastPrintItems } from './db/prints';
 import { getSettings } from './db/settings';
-import { selectGuaranteed } from './digest/order';
-import { selectDigest } from './digest/select';
+import { capPerCategory, selectBalanced } from './digest/order';
 import { enrichRows } from './enrich';
 import { runIngest } from './ingest/service';
 import { emit } from './events';
@@ -26,12 +25,12 @@ import { getApiKey } from './secrets';
 
 /** Candidates per AI call (compact lines keep the prompt small). */
 export const MAX_CANDIDATES = 100;
-/** Rows read per recency window. */
-export const POOL_LIMIT = 300;
-/** Recency windows tried in order until the edition is full; null = no limit. */
-export const WINDOWS_DAYS: (number | null)[] = [14, 30, 90, null];
-/** Weekly / slow feeds (Pragmatic Engineer, Freakonomics) rarely have anything fresher than a couple of weeks. */
-export const MAX_AGE_DAYS = 14;
+/** Candidates per category sent to the AI (newest, feeds alternating). */
+export const PER_CATEGORY_CANDIDATES = 25;
+/** Safety cap on rows read for one curation (everything inside the age window). */
+export const POOL_LIMIT = 1000;
+/** Default / bounds of the "Max story age" setting. */
+export const MAX_AGE_DAYS = 3;
 export const CONCURRENCY = 3;
 
 export interface EditionDeps {
@@ -47,8 +46,8 @@ export interface Curated {
   usedAi: boolean;
   /** no OpenRouter key configured. */
   noKey: boolean;
-  /** recency window (days) that was needed; null = unlimited. */
-  windowDays: number | null;
+  /** the freshness window used (settings.max_age_days). */
+  windowDays: number;
 }
 
 interface State {
@@ -95,102 +94,85 @@ async function rulesOptions(db: Db) {
   };
 }
 
-/** What the last curation used, for Diagnostics. */
-const lastCuration = new WeakMap<Db, { window_days: number | null }>();
+const effectiveTime = (c: CandidateRow) => parseDt(c.published_at ?? c.fetched_at)?.getTime() ?? 0;
 
 /**
- * Pick the stories of the next edition. The size is guaranteed (settings.max_items_total) whenever enough
- * unseen non-political stories exist: AI picks within the category limits, then the remaining picks, then the
- * rest of the vetted pool round-robin across categories. A short pool widens the recency window (14, 30, 90
- * days, then unlimited) and vets further batches with the AI before the edition may come up short.
+ * Pick the stories of the next edition from articles no older than settings.max_age_days (no widening: when
+ * the window cannot fill the target the edition is simply smaller). The AI sees up to 25 newest candidates
+ * per category (never a global slice swamped by one busy feed) and ranks them; selectBalanced then
+ * guarantees coverage of every category with fresh stories, applies print limits as soft caps, alternates
+ * feeds and interleaves categories. Without an AI the same rules run on newest-first order.
  */
 export async function curateEdition(db: Db, deps: EditionDeps = {}): Promise<Curated> {
   const rules = await rulesOptions(db);
   const client = await resolveClient(deps);
-  const asItem = (c: CandidateRow) => ({ article_id: c.id, title: c.title, category_slug: c.category_slug });
+  const windowDays = rules.settings.max_age_days;
+  const asItem = (c: CandidateRow) => ({ article_id: c.id, title: c.title, category_slug: c.category_slug, feed_id: c.feed_id });
 
-  const seen = new Set<number>();
-  const vetted: CandidateRow[] = []; // non-political, in newest-first order per window
+  const all = await listCurationCandidates(db, { limit: POOL_LIMIT, maxAgeDays: windowDays, now: deps.now });
+  const remaining = [...all];
+  const byId = new Map<number, CandidateRow>(all.map((c) => [c.id, c]));
+  const vetted: CandidateRow[] = []; // non-political
   const aiPicks: number[] = [];
-  const plain: CandidateRow[] = []; // vetted without the AI (heuristic politics filter only)
-  const byId = new Map<number, CandidateRow>();
   let usedAi = false;
   let aiOff = !client;
   let noKey = !client;
   let items: ReturnType<typeof asItem>[] = [];
-  let windowDays: number | null = MAX_AGE_DAYS;
-  let anyCandidates = false;
 
   const select = () => {
-    const plainPicks = selectDigest(
-      plain.map((c) => ({ ...asItem(c), tldr: '', published_at: parseDt(c.published_at) })),
-      rules,
-    ).map((p) => byId.get(p.article_id)!);
-    const picks = [...aiPicks.map((id) => byId.get(id)!), ...plainPicks].map(asItem);
-    const picked = new Set(picks.map((p) => p.article_id));
-    const pool = vetted.filter((c) => !picked.has(c.id)).map(asItem);
-    return selectGuaranteed(picks, pool, rules);
+    const picked = new Set(aiPicks);
+    const rest = vetted.filter((c) => !picked.has(c.id)).sort((x, y) => effectiveTime(y) - effectiveTime(x) || y.id - x.id);
+    const ranked = [...aiPicks.map((id) => byId.get(id)!), ...rest].map(asItem);
+    return selectBalanced(ranked, rules);
   };
 
-  for (const w of WINDOWS_DAYS) {
-    windowDays = w;
-    const pool = await listCurationCandidates(db, { limit: POOL_LIMIT, maxAgeDays: w, now: deps.now });
-    const queue = pool.filter((c) => !seen.has(c.id));
-    if (pool.length > 0) anyCandidates = true;
-    while (queue.length > 0) {
-      const batch = queue.splice(0, MAX_CANDIDATES);
-      for (const c of batch) {
-        seen.add(c.id);
-        byId.set(c.id, c);
-      }
-      let aiOk = false;
-      if (!aiOff && client) {
-        try {
-          const verdict = await timed('curate.ai', () =>
-            curateWithAi(
-              batch.map((c) => ({ id: c.id, category_slug: c.category_slug, title: c.title, content_text: c.content_text })),
-              {
-                client,
-                model: rules.settings.model,
-                fallbackModel: rules.settings.fallback_model,
-                maxPicks: Math.min(batch.length, rules.maxTotal * 2),
-              },
-            ),
-          );
-          if (verdict && (verdict.picks.length > 0 || usedAi)) {
-            aiOk = true;
-            usedAi = true;
-            await clearError(db, 'curate');
-            const political = new Set(verdict.political);
-            await setPoliticalMany(db, [...political], true);
-            await setPoliticalMany(db, batch.filter((c) => !political.has(c.id)).map((c) => c.id), false);
-            aiPicks.push(...verdict.picks.filter((id) => !political.has(id)));
-            vetted.push(...batch.filter((c) => !political.has(c.id)));
-          } else {
-            console.warn(`[curate] AI reply unusable (model ${rules.settings.model}): no picks parsed`);
-            await recordError(db, 'curate', 'Curation failed: the AI reply had no usable picks');
-            aiOff = true;
-          }
-        } catch (e) {
+  while (remaining.length > 0) {
+    // Next batch: balanced across categories, so every category reaches the AI.
+    const batch = capPerCategory(remaining, PER_CATEGORY_CANDIDATES, MAX_CANDIDATES);
+    const inBatch = new Set(batch.map((c) => c.id));
+    for (let i = remaining.length - 1; i >= 0; i--) if (inBatch.has(remaining[i].id)) remaining.splice(i, 1);
+    let aiOk = false;
+    if (!aiOff && client) {
+      try {
+        const verdict = await timed('curate.ai', () =>
+          curateWithAi(
+            batch.map((c) => ({ id: c.id, category_slug: c.category_slug, title: c.title, content_text: c.content_text })),
+            {
+              client,
+              model: rules.settings.model,
+              fallbackModel: rules.settings.fallback_model,
+              maxPicks: Math.min(batch.length, rules.maxTotal * 2),
+            },
+          ),
+        );
+        if (verdict && (verdict.picks.length > 0 || usedAi)) {
+          aiOk = true;
+          usedAi = true;
+          await clearError(db, 'curate');
+          const political = new Set(verdict.political);
+          await setPoliticalMany(db, [...political], true);
+          await setPoliticalMany(db, batch.filter((c) => !political.has(c.id)).map((c) => c.id), false);
+          aiPicks.push(...verdict.picks.filter((id) => !political.has(id)));
+          vetted.push(...batch.filter((c) => !political.has(c.id)));
+        } else {
+          console.warn(`[curate] AI reply unusable (model ${rules.settings.model}): no picks parsed`);
+          await recordError(db, 'curate', 'Curation failed: the AI reply had no usable picks');
           aiOff = true;
-          if (e instanceof AIUnavailable) noKey = true;
-          else if (e instanceof AIError) {
-            console.warn(`[curate] AI curation failed (model ${rules.settings.model}): ${redact(e.message).slice(0, 200)}`);
-            await recordError(db, 'curate', `Curation failed: ${e.message}`);
-          } else throw e;
         }
+      } catch (e) {
+        aiOff = true;
+        if (e instanceof AIUnavailable) noKey = true;
+        else if (e instanceof AIError) {
+          console.warn(`[curate] AI curation failed (model ${rules.settings.model}): ${redact(e.message).slice(0, 200)}`);
+          await recordError(db, 'curate', `Curation failed: ${e.message}`);
+        } else throw e;
       }
-      if (!aiOk) {
-        plain.push(...batch);
-        vetted.push(...batch);
-      }
-      items = select();
-      if (items.length >= rules.maxTotal) break;
     }
+    if (!aiOk) vetted.push(...batch);
+    items = select();
     if (items.length >= rules.maxTotal) break;
   }
-  if (!anyCandidates) await clearError(db, 'curate');
-  lastCuration.set(db, { window_days: windowDays });
+  if (all.length === 0) await clearError(db, 'curate');
   return { items, usedAi, noKey, windowDays };
 }
 
@@ -325,12 +307,13 @@ export async function getEdition(db: Db, deps: EditionDeps = {}): Promise<Editio
   const items = await listEditionItems(db);
   const noKey = !(await resolveClient(deps));
   const lastError = pickLastError(await getLastErrors(db));
-  const { max_items_total } = await getSettings(db);
+  const { max_items_total, max_age_days } = await getSettings(db);
   return {
     items,
     status: { ...state.status, no_key: noKey, last_error: lastError },
     built_at: await getEditionBuiltAt(db),
     target: max_items_total,
+    max_age_days,
   };
 }
 
@@ -352,7 +335,7 @@ export async function fetchNewNews(db: Db, deps: EditionDeps = {}, o: { awaitBui
 }
 
 export async function getDiagnostics(db: Db, deps: EditionDeps = {}): Promise<Diagnostics> {
-  const windowDays = lastCuration.get(db)?.window_days ?? MAX_AGE_DAYS;
+  const windowDays = (await getSettings(db)).max_age_days;
   const counts = await countArticles(db, { maxAgeDays: windowDays, now: deps.now });
   const ed = await countEditionSummarized(db);
   const inEdition = new Map<string, number>();
@@ -369,6 +352,7 @@ export async function getDiagnostics(db: Db, deps: EditionDeps = {}): Promise<Di
   return {
     hints,
     window_days: windowDays,
+    feeds: await feedDiagnostics(db, { maxAgeDays: windowDays, now: deps.now }),
     categories,
     last_errors: await getLastErrors(db),
     counts: { articles: counts.articles, candidates: counts.candidates, edition_size: ed.size, summarized: ed.summarized },

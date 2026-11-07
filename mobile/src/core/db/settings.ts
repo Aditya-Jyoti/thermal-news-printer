@@ -64,6 +64,7 @@ export async function setSetting(db: Db, key: string, value: unknown): Promise<v
 
 export const DEFAULT_SETTINGS: Settings = {
   max_items_total: 8,
+  max_age_days: 3,
   model: 'google/gemma-3-12b-it',
   fallback_model: 'deepseek/deepseek-v4.1-flash',
   printer_address: null,

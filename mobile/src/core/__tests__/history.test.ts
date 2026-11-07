@@ -66,8 +66,8 @@ beforeEach(async () => {
 describe('migration v3', () => {
   it('adds read_at and archive tables, and back-fills printed prints into History', async () => {
     const old = await createMemoryDb({ migrate: false });
-    await old.exec(MIGRATIONS[0]);
-    await old.exec(MIGRATIONS[1]);
+    await old.exec(MIGRATIONS[0] as string);
+    await old.exec(MIGRATIONS[1] as string);
     await old.exec('PRAGMA user_version=2');
     await old.run("INSERT INTO categories(name, slug, created_at) VALUES('P','p','2026-01-01')");
     await old.run("INSERT INTO feeds(url, category_id, created_at) VALUES('u',1,'2026-01-01')");
@@ -76,7 +76,7 @@ describe('migration v3', () => {
     await old.run("INSERT INTO prints(created_at, trigger, status) VALUES('2026-01-03T08:00:00+00:00','manual','failed')");
     await old.run("INSERT INTO print_items(print_id, article_id, position, category_slug, tldr) VALUES(1,1,1,'p','hello')");
     await migrate(old);
-    expect((await old.get<{ user_version: number }>('PRAGMA user_version'))?.user_version).toBe(3);
+    expect((await old.get<{ user_version: number }>('PRAGMA user_version'))?.user_version).toBe(4);
     await old.run('SELECT read_at FROM articles');
     const h = await listHistory(old);
     expect(h).toHaveLength(1);
@@ -175,11 +175,11 @@ describe('history grouping by local day', () => {
 });
 
 describe('edition window and shortfall', () => {
-  it('uses a 14 day first window and 100 candidates per AI call', async () => {
-    expect(MAX_AGE_DAYS).toBe(14);
+  it('defaults to a 3 day window and 100 candidates per AI call', async () => {
+    expect(MAX_AGE_DAYS).toBe(3);
     expect(MAX_CANDIDATES).toBe(100);
-    const recent = await seed({ ageDays: 12 });
-    await seed({ ageDays: 16 });
+    const recent = await seed({ ageDays: 2 });
+    await seed({ ageDays: 4 });
     expect((await listCurationCandidates(db, { limit: MAX_CANDIDATES, maxAgeDays: MAX_AGE_DAYS })).map((c) => c.id)).toEqual([recent]);
   });
 
@@ -190,7 +190,7 @@ describe('edition window and shortfall', () => {
 
   it('fills up to max_items_total from candidates the AI did not pick, and reports the target', async () => {
     await updateSettings(db, { max_items_total: 5 });
-    for (let i = 0; i < 7; i++) await seed({ ageDays: i });
+    for (let i = 0; i < 7; i++) await seed({ ageDays: i * 0.3 });
     const client: AiClient = { chat: async (o) => (o.user.includes('Candidates:') ? '{"picks": [1], "political": []}' : TLDR) };
     const res = await fetchNewNews(db, { client, fetch: async () => new Response('', { status: 404 }) });
     expect(res.edition.items).toHaveLength(5);

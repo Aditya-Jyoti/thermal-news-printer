@@ -16,7 +16,7 @@ Below is a list of candidate stories, one per line: id | #category | title | ope
 
 1. Pick the most interesting, substantive, NON-political stories: new product launches, research and scientific findings, engineering deep dives, education and learning ideas, big non-political breaking news.
 2. Skip listicles, promotions and ads, podcast-episode filler, link roundups, vague teasers, and near-duplicates of a story you already picked (keep the better one).
-3. Order the picks from most to least interesting. Pick at most MAX_PICKS.
+3. Cover as many different categories as you can; do not let one category dominate. Order the picks from most to least interesting. Pick at most MAX_PICKS.
 4. Separately list the ids of POLITICAL stories: elections, parties, politicians or officials as the focus, legislation or regulatory fights, partisan debates, protests, war or geopolitical commentary, culture-war topics. A company merely mentioning a law in passing is not political. Political stories must never be picked.
 
 Reply with ONLY a JSON object, no code fences and no commentary:
