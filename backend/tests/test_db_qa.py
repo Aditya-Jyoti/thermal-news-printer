@@ -100,7 +100,7 @@ def test_feed_url_change_clears_validators_but_same_url_keeps_them(conn):
 def test_feed_url_change_to_existing_conflicts(conn):
     fid = _feed_id(conn, "products")
     with pytest.raises(db.Conflict):
-        db.update_feed(conn, fid, url="https://blog.pragmaticengineer.com/rss/")
+        db.update_feed(conn, fid, url="https://www.infoq.com/feed/")
 
 
 def test_feed_enable_toggle_and_title_null_clears(conn):

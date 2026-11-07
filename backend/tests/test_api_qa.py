@@ -172,7 +172,7 @@ def test_feeds_filter_by_category(api):
     client, path = api
     cid = _category_id(path, "engineering")
     feeds = client.get(f"/feeds?category_id={cid}").json()
-    assert len(feeds) == 1 and feeds[0]["category_id"] == cid
+    assert len(feeds) == 4 and feeds[0]["category_id"] == cid
     assert {"id", "url", "title", "category_id", "enabled", "last_fetched_at", "last_error"} <= set(feeds[0])
 
 
@@ -193,7 +193,7 @@ def test_feed_patch_enable_move_and_url_rules(api):
     assert r.status_code == 200 and r.json()["enabled"] is False
     eng = _category_id(path, "engineering")
     assert client.patch(f"/feeds/{fid}", json={"category_id": eng}).json()["category_id"] == eng
-    dup = "https://blog.pragmaticengineer.com/rss/"
+    dup = "https://www.infoq.com/feed/"
     assert client.patch(f"/feeds/{fid}", json={"url": dup}).status_code == 409
     assert client.patch(f"/feeds/{fid}", json={"url": "notaurl"}).status_code == 422
     assert client.patch("/feeds/9999", json={"enabled": True}).status_code == 404
@@ -227,8 +227,8 @@ def test_feeds_refresh_all_enabled_and_error_reported(api):
     r = client.post("/feeds/refresh")
     assert r.status_code == 200
     body = r.json()
-    assert body["feeds_checked"] == 5 and body["new_articles"] == 0
-    assert len(body["errors"]) == 5
+    assert body["feeds_checked"] == 11 and body["new_articles"] == 0
+    assert len(body["errors"]) == 11
 
 
 @respx.mock
