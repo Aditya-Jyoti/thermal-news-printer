@@ -117,21 +117,12 @@ def test_category_create_strips_name(api):
     assert client.post("/categories", json={"name": "  Padded  "}).json()["name"] == "Padded"
 
 
-@pytest.mark.xfail(
-    reason="BUG: whitespace-only category name passes min_length=1 and is stored as an empty name "
-           "(app/api/app.py category_create strips after pydantic validation); expected 422",
-    strict=True,
-)
 def test_category_create_whitespace_only_name_rejected(api):
     client, _ = api
     r = client.post("/categories", json={"name": "   "})
     assert r.status_code == 422
 
 
-@pytest.mark.xfail(
-    reason="BUG: whitespace-only category name accepted on PATCH and stored as empty; expected 422",
-    strict=True,
-)
 def test_category_patch_whitespace_only_name_rejected(api):
     client, path = api
     cid = _category_id(path, "learning")

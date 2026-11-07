@@ -204,14 +204,14 @@ def test_next_digest_picks_fresh_items_and_skips_near_duplicate_of_last_print(co
         assert "foldable" not in title  # near-duplicate of last print filtered out
 
 
-def test_pending_or_failed_prints_still_block_their_articles(conn):
+def test_pending_print_blocks_but_failed_print_releases_articles(conn):
     add(conn, 1, slug="products", title="Alpha launch zed one")
     _summarize_all(conn)
     items = build_digest(conn)
     pid = db.create_print(conn, "manual", items)  # left pending
     assert build_digest(conn) == []
     db.set_print_status(conn, pid, "failed", error="ble timeout")
-    assert build_digest(conn) == []
+    assert [d.article_id for d in build_digest(conn)] == [i.article_id for i in items]
 
 
 def test_political_and_unsummarized_never_in_digest(conn):

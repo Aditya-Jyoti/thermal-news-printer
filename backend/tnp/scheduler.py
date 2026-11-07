@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Callable
 
 from tnp import db
-from tnp.api.cron import cron_matches
+from tnp.cron import cron_matches
 
 log = logging.getLogger(__name__)
 

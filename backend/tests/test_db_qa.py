@@ -216,7 +216,7 @@ def test_last_print_items_only_considers_printed_status(conn):
     db.set_print_status(conn, failed, "failed", error="ble down")
     last = db.get_last_print_items(conn)
     assert [i.article_id for i in last] == [a1]
-    assert db.get_printed_article_ids(conn) == {a1, a2, a3}  # any print_items row counts
+    assert db.get_printed_article_ids(conn) == {a1, a2}  # printed + pending count; failed does not
 
 
 def test_print_status_unknown_id_not_found(conn):

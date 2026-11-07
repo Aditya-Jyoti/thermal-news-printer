@@ -53,5 +53,6 @@ def test_schedules_settings_and_stubs(client):
     assert client.get("/articles").json() == {"items": [], "total": 0, "limit": 50, "offset": 0}
     assert client.get("/articles/1").status_code == 404
     assert client.get("/prints").json()["total"] == 0
-    for method, path in (("get", "/print/preview.png"), ("post", "/print")):
-        assert getattr(client, method)(path).status_code == 501
+    preview = client.get("/print/preview.png")
+    assert preview.status_code == 200 and preview.headers["content-type"] == "image/png"
+    assert client.post("/print").status_code == 409  # empty digest: nothing new to print

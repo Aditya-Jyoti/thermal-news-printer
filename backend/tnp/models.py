@@ -6,11 +6,13 @@ and mobile/src/api/types.ts.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Generic, Literal, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
 
 T = TypeVar("T")
+
+CategoryName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=40)]
 
 
 class Page(BaseModel, Generic[T]):
@@ -23,13 +25,13 @@ class Page(BaseModel, Generic[T]):
 # --- Categories ---------------------------------------------------------------
 
 class CategoryCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=40)
+    name: CategoryName
     color: str | None = None  # "#RRGGBB"; app falls back to Material You palette
     print_limit: int = Field(default=2, ge=0, le=20)
 
 
 class CategoryUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=40)
+    name: CategoryName | None = None
     color: str | None = None
     print_limit: int | None = Field(default=None, ge=0, le=20)
 

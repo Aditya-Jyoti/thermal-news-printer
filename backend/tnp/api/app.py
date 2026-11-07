@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from tnp import db
-from tnp.api.cron import validate_cron
+from tnp.cron import validate_cron
 from tnp.config import load_config
 from tnp.ingest.service import run_ingest
 from tnp.pipeline import ProcessResult, build_digest, process_pending

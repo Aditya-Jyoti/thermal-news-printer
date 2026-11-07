@@ -137,11 +137,6 @@ def test_stop_without_start_is_harmless(db_path):
     assert s._stop.is_set()
 
 
-@pytest.mark.xfail(
-    reason="BUG: importing tnp.scheduler first fails with a circular ImportError "
-           "(tnp.scheduler -> tnp.api.cron -> tnp.api/__init__ -> tnp.api.app -> tnp.scheduler)",
-    strict=True,
-)
 def test_scheduler_module_imports_in_fresh_interpreter():
     proc = subprocess.run(
         [sys.executable, "-c", "from tnp.scheduler import Scheduler"],

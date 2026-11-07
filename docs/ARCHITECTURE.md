@@ -80,7 +80,8 @@ Default schedule: `0 8 * * *` ("Morning edition"). Default settings: `{"max_item
 
 ## Deduplication rules
 1. Ingest: an article whose `fingerprint` already exists is skipped (cross-feed dedup).
-2. Print selection: never select an article that appears in ANY `print_items` row.
+2. Print selection: never select an article that appears in a `print_items` row of a `printed` or `pending` print.
+   Items of `failed` prints become eligible again (they never reached paper).
 3. Print selection: never select an article whose normalized title is near-identical (token Jaccard ≥ 0.8)
    to an item in the most recent print, or to another item in the same batch.
 4. Political articles (`is_political = 1`) are never printed and are hidden from the default feed.
