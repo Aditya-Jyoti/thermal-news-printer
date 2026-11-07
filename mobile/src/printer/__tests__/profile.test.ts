@@ -1,4 +1,5 @@
 import { describe, expect, it, jest } from '@jest/globals';
+import { makeEvennessBitmap } from '../testPattern';
 import type { ReceiptBitmap } from '../../device/contracts';
 import {
   CMD_SET_ENERGY,
@@ -14,7 +15,7 @@ import {
 } from '../protocol';
 import golden from './fixtures/golden.json';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DARKNESS_KEY, DEFAULT_DARKNESS, getDarkness, profileFor, setDarkness } from '../darkness';
+import { DARKNESS_KEY, DEFAULT_DARKNESS, buildJob, getDarkness, profileFor, setDarkness } from '../darkness';
 
 jest.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map<string, string>();
@@ -75,7 +76,7 @@ describe('print profiles', () => {
   it.each(Object.entries(PROFILES))('%s: speed is sent after quality and before energy/lattice', (_n, p) => {
     const frames = parse(encodeBitmap(bitmap(2, () => 1), { profile: p }));
     const cmds = frames.map((f) => f.cmd);
-    expect(cmds.slice(0, 6)).toEqual([0xa3, CMD_SET_QUALITY, CMD_SET_SPEED, CMD_SET_ENERGY, 0xbe, 0xa6]);
+    expect(cmds.slice(0, 7)).toEqual([0xa3, CMD_SET_QUALITY, CMD_SET_SPEED, CMD_SET_ENERGY, 0xbe, 0xa9, 0xa6]);
     expect(frames[1].payload).toEqual([p.quality]);
     expect(frames[2].payload).toEqual([p.speed]);
     expect(frames[3].payload).toEqual([p.energy >> 8, p.energy & 0xff]);
@@ -137,5 +138,45 @@ describe('darkness storage', () => {
     expect(await getDarkness()).toBe('dark');
     (AsyncStorage.setItem as any).mockRejectedValueOnce(new Error('boom'));
     await expect(setDarkness('light')).resolves.toBeUndefined();
+  });
+});
+
+describe('buildJob applies the saved level', () => {
+  it.each(['light', 'normal', 'dark', 'darkest'] as const)('uses the %s profile from storage', async (level) => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await setDarkness(level);
+    const bm = bitmap(2, () => 1);
+    const job = await buildJob(bm);
+    const p = PROFILES[level];
+    expect(job.level).toBe(level);
+    expect(job.profile).toBe(p);
+    expect(toHex(job.data)).toBe(toHex(encodeBitmap(bm, { profile: p })));
+    const frames = parse(job.data);
+    expect(frames.find((f) => f.cmd === CMD_SET_SPEED)?.payload).toEqual([p.speed]);
+    expect(frames.find((f) => f.cmd === CMD_SET_ENERGY)?.payload).toEqual([p.energy >> 8, p.energy & 0xff]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining(`level=${level} `));
+    warn.mockRestore();
+  });
+
+  it('an explicit override beats storage; reference profile has no 0xA9', async () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await setDarkness('light');
+    expect((await buildJob(bitmap(1, () => 1), 'darkest')).level).toBe('darkest');
+    expect(parse(encodeBitmap(bitmap(1, () => 1))).some((f) => f.cmd === 0xa9)).toBe(false);
+    warn.mockRestore();
+  });
+});
+
+describe('evenness pattern', () => {
+  it('is 384 wide with 6 solid bands, a checkerboard and hairlines', () => {
+    const b = makeEvennessBitmap();
+    expect(b.width).toBe(384);
+    expect(b.pixels.length).toBe(384 * b.height);
+    const rowSum = (y: number) => b.pixels.subarray(y * 384, (y + 1) * 384).reduce((a, v) => a + v, 0);
+    expect(rowSum(0)).toBe(384);
+    expect(rowSum(7)).toBe(384);
+    expect(rowSum(8)).toBe(0);
+    expect(rowSum(56)).toBe(384);
+    expect(rowSum(6 * 56 + 10)).toBe(192);
   });
 });

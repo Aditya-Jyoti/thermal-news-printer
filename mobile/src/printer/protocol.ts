@@ -20,6 +20,7 @@ export const CMD_SET_PAPER = 0xa1;
 export const CMD_LATTICE = 0xa6;
 export const CMD_SET_ENERGY = 0xaf;
 export const CMD_APPLY_ENERGY = 0xbe;
+export const CMD_UPDATE_DEVICE = 0xa9;
 
 const CRC8_TABLE: number[] = (() => {
   const t: number[] = [];
@@ -49,7 +50,17 @@ export function frame(cmd: number, payload: ArrayLike<number> = []): Uint8Array 
 
 export const cmdGetDevState = () => frame(CMD_GET_DEV_STATE, [0x00]);
 export const cmdSetQuality200dpi = () => frame(CMD_SET_QUALITY, [0x32]);
+/**
+ * NOTE endianness: this is big-endian (rbaron). NaitLee sends the 16-bit energy little-endian and lists
+ * the SC03h as "new kind". Both agree only for symmetric values (0xFFFF, 0x4040); if an asymmetric
+ * energy is ever introduced, verify on hardware and prefer NaitLee's little-endian order.
+ */
 export const cmdSetEnergy = (val: number) => frame(CMD_SET_ENERGY, [(val >> 8) & 0xff, val & 0xff]);
+/**
+ * 0xA9 "update device" (NaitLee/Cat-Printer, GPL-3.0; protocol facts only): sent right after apply-energy,
+ * before the lattice start; it appears to make the printer commit the speed/energy settings.
+ */
+export const cmdUpdateDevice = () => frame(CMD_UPDATE_DEVICE, [0x00]);
 export const cmdApplyEnergy = () => frame(CMD_APPLY_ENERGY, [0x01]);
 export const cmdLatticeStart = () =>
   frame(CMD_LATTICE, [0xaa, 0x55, 0x17, 0x38, 0x44, 0x5f, 0x5f, 0x5f, 0x44, 0x38, 0x2c]);
@@ -123,6 +134,8 @@ export interface PrintProfile {
   speed: number;
   /** Quality byte for 0xA4. 0x32 (50) = 200 dpi, the only value both reference projects send. */
   quality: number;
+  /** Send 0xA9 "update device" after apply-energy. Off for the reference envelope. */
+  commit?: boolean;
 }
 
 export type DarknessLevel = 'light' | 'normal' | 'dark' | 'darkest';
@@ -134,10 +147,10 @@ export type DarknessLevel = 'light' | 'normal' | 'dark' | 'darkest';
  * big-endian while NaitLee sends it little-endian; 0xFFFF and 0x4040 are identical either way.
  */
 export const PROFILES: Record<DarknessLevel, PrintProfile> = {
-  light: { energy: 0x4040, speed: 24, quality: 0x32 },
-  normal: { energy: 0xffff, speed: 32, quality: 0x32 },
-  dark: { energy: 0xffff, speed: 36, quality: 0x32 },
-  darkest: { energy: 0xffff, speed: 40, quality: 0x32 },
+  light: { energy: 0x4040, speed: 24, quality: 0x32, commit: true },
+  normal: { energy: 0xffff, speed: 32, quality: 0x32, commit: true },
+  dark: { energy: 0xffff, speed: 36, quality: 0x32, commit: true },
+  darkest: { energy: 0xffff, speed: 40, quality: 0x32, commit: true },
 };
 
 /** Exactly the rbaron/catprinter envelope (no speed command): used for the golden fixtures. */
@@ -147,7 +160,7 @@ export function encodeRows(
   rows: ArrayLike<number>[],
   energy = DEFAULT_ENERGY,
   feed = DEFAULT_FEED,
-  profile: Pick<PrintProfile, 'speed' | 'quality'> = REFERENCE_PROFILE,
+  profile: Pick<PrintProfile, 'speed' | 'quality' | 'commit'> = REFERENCE_PROFILE,
 ): Uint8Array {
   return concat([
     cmdGetDevState(),
@@ -155,6 +168,7 @@ export function encodeRows(
     ...(profile.speed ? [cmdSetSpeed(profile.speed)] : []),
     cmdSetEnergy(energy),
     cmdApplyEnergy(),
+    ...(profile.commit ? [cmdUpdateDevice()] : []),
     cmdLatticeStart(),
     ...rows.map(cmdPrintRow),
     cmdFeedPaper(feed),

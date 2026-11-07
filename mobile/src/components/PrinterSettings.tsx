@@ -8,6 +8,7 @@ import {
   DEFAULT_DARKNESS,
   createPrinterDriver,
   getDarkness,
+  makeEvennessBitmap,
   makeTestBitmap,
   setDarkness,
   type DarknessLevel,
@@ -96,6 +97,7 @@ export function PrinterSettings({ selectedId, onSelect }: Props) {
   };
 
   const printTest = () => printJob(makeTestBitmap, 'Test page sent to the printer.');
+  const printEvenness = () => printJob(makeEvennessBitmap, 'Evenness test sent to the printer.');
   const printSample = () =>
     printJob(async () => {
       await setDarkness(darkness); // render + driver read the level shown on screen
@@ -136,6 +138,14 @@ export function PrinterSettings({ selectedId, onSelect }: Props) {
       <Button mode="outlined" icon="printer-check" onPress={printSample} disabled={scanning || progress !== null || !selectedId}>
         Print darkness sample
       </Button>
+
+      <Button mode="outlined" icon="format-line-weight" onPress={printEvenness} disabled={scanning || progress !== null || !selectedId}>
+        Print evenness test
+      </Button>
+      <Text variant="bodySmall">
+        Horizontal light bands: streaming/flow problem. Gradual fade down the strip: battery or heat (charge fully).
+        Vertical streaks: clean the print head. Patchy, blotchy areas: paper quality or wrong side.
+      </Text>
 
       {progress !== null ? <ProgressBar progress={progress} style={styles.progress} /> : null}
 

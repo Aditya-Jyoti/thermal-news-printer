@@ -3,8 +3,7 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import { BleManager, State, type Device } from 'react-native-ble-plx';
 
 import type { PrinterDriver, PrinterInfo, ReceiptBitmap } from '../device/contracts';
-import { getDarkness, profileFor, type DarknessLevel } from './darkness';
-import { encodeBitmap } from './protocol';
+import { buildJob, type DarknessLevel } from './darkness';
 import {
   PrinterError,
   PrinterNotFound,
@@ -104,10 +103,11 @@ class BlxLink implements PrinterLink {
     private readonly service: string,
   ) {}
 
-  async requestMtu(mtu: number): Promise<void> {
+  async requestMtu(mtu: number): Promise<number | void> {
     if (Platform.OS !== 'android') return;
     try {
       this.device = await this.m.requestMTUForDevice(this.device.id, mtu);
+      return this.device.mtu;
     } catch {
       /* best effort */
     }
@@ -172,8 +172,7 @@ export function createPrinterDriver(driverOpts: DriverOptions = {}): PrinterDriv
         if (!found.length) throw new PrinterNotFound();
         id = found[0].id;
       }
-      const level = driverOpts.darkness ?? (await getDarkness());
-      const data = encodeBitmap(bitmap, { profile: profileFor(level) });
+      const { data } = await buildJob(bitmap, driverOpts.darkness);
       await sendJob(new BlxConnector(m), id, data, { ...driverOpts, onProgress: opts?.onProgress ?? driverOpts.onProgress });
     },
   };

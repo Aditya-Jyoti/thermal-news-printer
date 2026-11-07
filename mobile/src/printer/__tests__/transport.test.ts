@@ -100,7 +100,7 @@ describe('sendJob', () => {
 
   it('retries connect then succeeds', async () => {
     const f = fakeLink((n, emit) => {
-      if (n === 1) emit(READY);
+      if (n === lastWrite) emit(READY);
     });
     let calls = 0;
     const c: Connector = {
@@ -131,5 +131,83 @@ describe('sendJob', () => {
     });
     await expect(sendJob({ connect: async () => f.link }, 'id', data, fast)).rejects.toThrow(/disconnected/);
     expect(f.log).toContain('disconnect');
+  });
+});
+
+describe('flow control', () => {
+  const data = encodeBitmap(makeTestBitmap());
+  const PAUSE = Uint8Array.from([0x51, 0x78, 0xae, 0x01, 0x01, 0x00, 0x10, 0x70, 0xff]);
+  const tick = (ms = 30) => new Promise((r) => setTimeout(r, ms));
+
+  it('halts writes on pause and resumes on resume', async () => {
+    const f = fakeLink((n, emit) => {
+      if (n === 3) emit(PAUSE);
+      if (n === Math.ceil(data.length / 100)) { emit(STATE_REPLY); emit(STATE_REPLY); }
+    });
+    const p = sendJob({ connect: async () => f.link }, 'id', data, { ...fast, pacingMs: 1, sleep: tick.bind(null, 1) as any });
+    await tick(60);
+    expect(f.writes).toHaveLength(3);
+    await tick(60);
+    expect(f.writes).toHaveLength(3); // still held
+    f.emit(READY); // resume (same bytes as the reference 'ready')
+    await p;
+    expect(f.writes.reduce((a, w) => a + w.length, 0)).toBe(data.length);
+  });
+
+  it('a resume mid-stream does not end the job early', async () => {
+    const f = fakeLink((n, emit) => {
+      if (n === 2) emit(READY);
+    });
+    const warn = jest.fn();
+    await sendJob({ connect: async () => f.link }, 'id', data, { ...fast, doneTimeoutMs: 20, warn });
+    expect(warn).toHaveBeenCalledTimes(1); // only the done-timeout, i.e. READY was not taken as done
+    expect(f.writes.reduce((a, w) => a + w.length, 0)).toBe(data.length);
+  });
+
+  it('continues after the pause timeout with a warning', async () => {
+    const f = fakeLink((n, emit) => {
+      if (n === 2) emit(PAUSE);
+      if (n === Math.ceil(data.length / 100)) { emit(STATE_REPLY); emit(STATE_REPLY); }
+    });
+    const warn = jest.fn();
+    await sendJob({ connect: async () => f.link }, 'id', data, { ...fast, pauseTimeoutMs: 40, warn });
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/did not resume/));
+    expect(f.writes.reduce((a, w) => a + w.length, 0)).toBe(data.length);
+  });
+
+  it('a link error while paused aborts instead of hanging', async () => {
+    const f = fakeLink((n, emit, fail) => {
+      if (n === 2) {
+        emit(PAUSE);
+        setTimeout(() => fail(new Error('dropped')), 10);
+      }
+    });
+    await expect(
+      sendJob({ connect: async () => f.link }, 'id', data, { ...fast, pauseTimeoutMs: 5000 }),
+    ).rejects.toThrow(/disconnected/);
+  });
+
+  it('ignores unrelated notifications and keeps a steady pace', async () => {
+    const f = fakeLink((n, emit) => {
+      if (n % 5 === 0) emit(Uint8Array.from([0x51, 0x78, 0xa1, 0x01, 0x00]));
+      if (n === Math.ceil(data.length / 100)) { emit(STATE_REPLY); emit(STATE_REPLY); }
+    });
+    const sleeps: number[] = [];
+    await sendJob({ connect: async () => f.link }, 'id', data, {
+      ...fast,
+      pacingMs: 10,
+      sleep: async (ms) => void sleeps.push(ms),
+    });
+    expect(f.writes.reduce((a, w) => a + w.length, 0)).toBe(data.length);
+    expect(sleeps.filter((s) => s === 10)).toHaveLength(f.writes.length);
+  });
+
+  it('caps the chunk size to the negotiated MTU minus 3', async () => {
+    const f = fakeLink((n, emit) => {
+      if (n >= 1) { emit(STATE_REPLY); emit(STATE_REPLY); }
+    });
+    f.link.requestMtu = async () => 53;
+    await sendJob({ connect: async () => f.link }, 'id', data, fast);
+    expect(Math.max(...f.writes.map((w) => w.length))).toBe(50);
   });
 });
