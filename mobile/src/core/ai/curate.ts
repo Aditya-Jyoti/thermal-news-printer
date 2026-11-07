@@ -8,7 +8,7 @@ export interface CurateCandidate {
   content_text: string | null;
 }
 
-export const SNIPPET_CHARS = 220;
+export const SNIPPET_CHARS = 160;
 export const CURATE_MAX_TOKENS = 500;
 
 export const CURATE_SYSTEM_PROMPT = `You are the editor of a tiny daily newspaper printed on a narrow receipt strip, for a curious reader.
@@ -25,7 +25,7 @@ Reply with ONLY a JSON object, no code fences and no commentary:
 const clip = (s: string | null, n: number) => (s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
 const oneLine = (s: string) => s.replace(/[\r\n|]+/g, ' ').replace(/\s+/g, ' ').trim();
 
-/** Compact candidate lines: `id | #category | title | first ~220 chars of content`. */
+/** Compact candidate lines: `id | #category | title | first ~160 chars of content`. */
 export function candidateLines(cands: CurateCandidate[]): string {
   return cands
     .map((c) => `${c.id} | #${c.category_slug} | ${oneLine(c.title)} | ${oneLine(clip(c.content_text, SNIPPET_CHARS))}`)

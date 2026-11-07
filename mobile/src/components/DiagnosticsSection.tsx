@@ -27,6 +27,16 @@ export function DiagnosticsSection() {
             {d.counts.articles} articles · {d.counts.candidates} candidates in window · edition {d.counts.edition_size} · summarized{' '}
             {d.counts.summarized}
           </Text>
+          {d.window_days !== undefined ? (
+            <Text variant="bodySmall" style={muted}>
+              Window used: {d.window_days === null ? 'no limit' : `${d.window_days} days`}
+            </Text>
+          ) : null}
+          {(d.categories ?? []).map((c) => (
+            <Text key={c.slug} variant="bodySmall" style={muted}>
+              #{c.slug}: {c.fetched} fetched · {c.eligible} eligible · {c.in_edition} in edition
+            </Text>
+          ))}
           {(d.hints ?? []).map((h) => (
             <Text key={h} variant="bodySmall" style={{ color: theme.colors.tertiary }}>
               {h}
