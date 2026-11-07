@@ -1,27 +1,21 @@
 """384px-wide, 1-bit newspaper receipt renderer.
 
-Layout: masthead + dateline across the full width, then a narrow left margin column holding
-a flipbook of a little newsie (paperboy) mascot (see sprites.py) and a text column with, per item,
-a plain-text `#tag` line and the TL;DR in a serif face. Titles are never printed.
+Text only (no sprites/art, to save paper): masthead + dateline, then per item a plain-text
+`#tag` line and the TL;DR in a serif face, full width. Titles are never printed.
 
-Text and rules are drawn on a grayscale canvas and hard-thresholded (crisp glyphs); the
-margin sprites live on a separate canvas and hold bold solid art plus a checker-shaded satchel; the two are merged
-into the final 1-bit image.
+Text and rules are drawn on a grayscale canvas and hard-thresholded to 1-bit (crisp glyphs).
 """
 from __future__ import annotations
 
-import random
 import shutil
 import subprocess
-import zlib
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 
-from PIL import Image, ImageChops, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont
 
 from tnp.models import DigestItem
-from tnp.print import sprites
 
 WIDTH = 384
 PAPER_NAME = "THE THERMAL TIMES"
@@ -33,12 +27,11 @@ _SERIF = FONT_DIR / "SourceSerif4-VF.ttf"
 _SERIF_ITALIC = FONT_DIR / "SourceSerif4-Italic-VF.ttf"
 
 # Layout constants (pixels).
-PAD = 10                    # outer left/right padding
-MARGIN_W = 52               # sprite column width
-RULE_X = PAD + MARGIN_W + 2  # x of the vertical column rule
-TEXT_X = RULE_X + 8
+PAD = 6                     # outer left/right padding
+TEXT_X = PAD
 TEXT_R = WIDTH - PAD
 TEXT_W = TEXT_R - TEXT_X
+TRAIL = 44                  # blank paper after the footer, for the tear-off
 BODY_SIZE = 21
 LEADING = 26
 THRESHOLD = 150
@@ -182,135 +175,86 @@ def _ordinal_date(dt: datetime) -> str:
     return f"{dt.strftime('%A')}, {dt.strftime('%B')} {dt.day}, {dt.year}"
 
 
-def _reaction_plan(slug: str, slot_idx: int, offset: int) -> str:
-    """Frame for the `slot_idx`-th sprite slot of an item: reaction first, then walk/read."""
-    if slot_idx == 0:
-        return sprites.frame_for_tag(slug)
-    cycle = sprites.WALK_CYCLE
-    return cycle[(slot_idx - 1 + offset) % len(cycle)]
-
-
 def render_receipt(
     items: list[DigestItem],
     *,
     edition_date: datetime,
     edition_name: str = "Morning Edition",
-    seed: int | None = None,
     issue_no: int | None = None,
 ) -> Image.Image:
-    """Render `items` as a 1-bit, 384px-wide newspaper receipt. Deterministic for equal inputs."""
-    if seed is None:
-        seed = zlib.crc32("|".join(f"{i.category_slug}:{i.tldr}" for i in items).encode())
-    rng = random.Random(seed)
-
+    """Render `items` as a 1-bit, 384px-wide, text-only newspaper receipt. Deterministic."""
     body_font = _font("body", BODY_SIZE, 440)
     tag_font = _font("italic", 17, 500)
     small = _font("body", 13, 500)
     small_it = _font("italic", 15, 400)
     ordered = sorted(items, key=lambda i: i.position)
 
-    # --- pass 1: layout (compute heights) so we can size the canvas ---
+    # --- layout: compute heights so we can size the canvas ---
     mast_font = _fit_display(PAPER_NAME, WIDTH - 2 * PAD)
     lines_per_item = [wrap_text(i.tldr, body_font, TEXT_W) for i in ordered]
-    item_h = [24 + len(ls) * LEADING + 12 for ls in lines_per_item]
-    top_h = 0
-    header_h = 138
+    item_h = [24 + len(ls) * LEADING + 6 for ls in lines_per_item]
+    header_h = 124
     if ordered:
         content_h = sum(item_h) + 14 * (len(ordered) - 1)
     else:
-        content_h = 90
-    footer_h = 140
-    height = top_h + header_h + content_h + footer_h
+        content_h = 60
+    footer_h = 100 + TRAIL
+    height = header_h + content_h + footer_h
 
     text = Image.new("L", (WIDTH, height), 255)
     d = ImageDraw.Draw(text)
-    art = Image.new("L", (WIDTH, height), 255)  # sprites (to be dithered)
 
     # --- masthead ---
-    y = 8
+    y = 6
     d.rectangle([PAD, y, WIDTH - PAD, y + 2], fill=0)
     d.line([(PAD, y + 5), (WIDTH - PAD, y + 5)], fill=0)
-    y += 11
+    y += 9
     asc, desc = mast_font.getmetrics()
     d.text((round((WIDTH - mast_font.getlength(PAPER_NAME)) / 2), y), PAPER_NAME, font=mast_font, fill=0)
     y += asc + desc + 2
     d.line([(PAD, y), (WIDTH - PAD, y)], fill=0)
-    y += 6
+    y += 5
     _centered(d, y, _ordinal_date(edition_date), small_it)
     y += 22
     d.line([(PAD, y), (WIDTH - PAD, y)], fill=0)
-    y += 5
+    y += 4
     no = issue_no if issue_no is not None else len(ordered)
     d.text((PAD, y), edition_name.upper(), font=small, fill=0)
     right = f"NO. {no}"
     d.text((WIDTH - PAD - small.getlength(right), y), right, font=small, fill=0)
     y += 20
     d.rectangle([PAD, y, WIDTH - PAD, y + 1], fill=0)
-    y += 12
-    content_top = y
+    y += 10
 
-    # --- items + margin flipbook ---
-    slot_h = sprites.SIZE[1] + 4
-    sprite_slots: list[tuple[int, str, int]] = []  # (y, frame, x offset)
-
-    walk_step = [rng.randrange(len(sprites.WALK_CYCLE))]
-
-    def place_slots(top: int, height_px: int, slug: str) -> None:
-        n = max(1, height_px // slot_h)
-        step = height_px / n
-        for k in range(n):
-            frame = _reaction_plan(slug, k, walk_step[0])
-            if k > 0:
-                walk_step[0] += 1  # walk cycle advances down the whole page
-            xoff = rng.randrange(0, 3)
-            sprite_slots.append((round(top + k * step + (step - sprites.SIZE[1]) / 2), frame, xoff))
-
+    # --- items ---
     if not ordered:
-        _centered(d, y + 24, EMPTY_TEXT, small_it, TEXT_X, TEXT_R)
+        _centered(d, y + 16, EMPTY_TEXT, small_it, TEXT_X, TEXT_R)
         y += content_h
-        d.line([(RULE_X, content_top), (RULE_X, y - 8)], fill=0)
-        place_slots(content_top, content_h - 8, "")
     else:
-        item_top = y
         for n, (it, ls) in enumerate(zip(ordered, lines_per_item)):
-            block_top = y
             d.text((TEXT_X, y), f"#{it.category_slug}", font=tag_font, fill=0)
             y += 24
-            for j, line in enumerate(ls):
+            for line in ls:
                 _draw_line(d, TEXT_X, y, line, body_font, TEXT_W, justify=False)
                 y += LEADING
-            y += 12
-            place_slots(block_top, y - block_top, it.category_slug)
+            y += 6
             if n < len(ordered) - 1:
                 _ornament(d, y + 3, TEXT_X, TEXT_R)
                 y += 14
-        d.line([(RULE_X, item_top - 2), (RULE_X, y - 6)], fill=0)
 
     # --- footer ---
-    fy = y + 6
+    fy = y + 4
     d.rectangle([PAD, fy, WIDTH - PAD, fy + 1], fill=0)
     d.line([(PAD, fy + 4), (WIDTH - PAD, fy + 4)], fill=0)
-    wave_y = fy + 12
-    fy += 16
-    n_items = len(ordered)
-    _centered(d, fy, f"{n_items} {'story' if n_items == 1 else 'stories'}", small_it, TEXT_X, TEXT_R)
-    fy += 24
-    _ornament(d, fy, TEXT_X + 10, TEXT_R - 10)
     fy += 12
-    _centered(d, fy, "That's all for today!", small_it, TEXT_X, TEXT_R)
+    n_items = len(ordered)
+    _centered(d, fy, f"{n_items} {'story' if n_items == 1 else 'stories'}", small_it)
+    fy += 22
+    _ornament(d, fy, PAD + 60, WIDTH - PAD - 60)
+    fy += 10
+    _centered(d, fy, "That's all for today!", small_it)
     fy += 20
-    _centered(d, fy, "Full stories in the app", small, TEXT_X, TEXT_R)
-    sprite_slots.append((wave_y, "wave", 0))
+    _centered(d, fy, "Full stories in the app", small)
 
-    # --- compose ---
     mask = text.point(lambda v: 0 if v < THRESHOLD else 255)
-    art_alpha = Image.new("L", (WIDTH, height), 0)
-    for sy, frame, xoff in sprite_slots:
-        sp = sprites.sprite_image(frame)
-        pos = (PAD + xoff, sy)
-        art.paste(sp.getchannel(0), pos, sp.getchannel(1))
-        art_alpha.paste(sp.getchannel(1), pos)
-    art_1 = art.point(lambda v: 0 if v < 128 else 255).convert("1", dither=Image.NONE)
-    text_1 = mask.convert("1", dither=Image.NONE)
-    out = ImageChops.darker(art_1, text_1)
-    return out.convert("1", dither=Image.NONE)
+    return mask.convert("1", dither=Image.NONE)

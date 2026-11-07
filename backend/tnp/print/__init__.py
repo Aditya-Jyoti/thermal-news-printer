@@ -47,12 +47,12 @@ def print_png_path(conn: sqlite3.Connection, print_id: int) -> Path:
     return prints_dir(conn) / f"{print_id}.png"
 
 
-def render_items(items: list[DigestItem], *, issue_no: int | None = None, seed: int | None = None) -> Image.Image:
+def render_items(items: list[DigestItem], *, issue_no: int | None = None) -> Image.Image:
     from tnp.print.render import render_receipt
 
     now = datetime.now()
     return render_receipt(
-        items, edition_date=now, edition_name=edition_name(now), seed=seed, issue_no=issue_no
+        items, edition_date=now, edition_name=edition_name(now), issue_no=issue_no
     )
 
 
@@ -78,7 +78,7 @@ def deliver(
     print_id = db.create_print(conn, trigger, digest)
     mode = printer_mode()
     try:
-        img = render_items(digest, issue_no=print_id, seed=print_id)
+        img = render_items(digest, issue_no=print_id)
         img.save(print_png_path(conn, print_id))
     except Exception as exc:
         log.exception("rendering print %s failed", print_id)

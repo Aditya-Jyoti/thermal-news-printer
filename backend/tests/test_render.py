@@ -8,7 +8,7 @@ import pytest
 from PIL import Image, ImageChops
 
 from tnp.models import DigestItem
-from tnp.print import render, sprites
+from tnp.print import render
 from tnp.print.render import WIDTH, render_receipt, wrap_text
 from tnp.print.samples import sample_items
 
@@ -41,16 +41,9 @@ def test_renderer_api_accepts_no_titles():
     assert "title" not in DigestItem.model_fields  # titles never reach the renderer
 
 
-def test_deterministic_for_same_input_and_seed():
+def test_deterministic_for_same_input():
     items = sample_items()
-    a, b = _render(items, seed=7), _render(items, seed=7)
-    assert a.tobytes() == b.tobytes()
-    assert _render(items).tobytes() == _render(items).tobytes()  # derived seed is stable
-
-
-def test_seed_changes_margin_only_slightly_but_stays_valid():
-    img = _render(sample_items(), seed=1)
-    assert img.size[0] == 384 and img.mode == "1"
+    assert _render(items).tobytes() == _render(items).tobytes()
 
 
 def test_empty_digest_renders_message_receipt():
@@ -83,49 +76,33 @@ def test_wrap_text_respects_width_and_preserves_words():
 
 
 def test_text_is_crisp_not_dithered():
-    # Item text column should be mostly pure ink/paper; the check is that rendering twice with
-    # different seeds keeps the text column identical (only the margin sprites vary).
-    items = sample_items()[:1]
-    a, b = _render(items, seed=1), _render(items, seed=99)
-    box = (render.TEXT_X, 150, 384, a.height - 150)
-    assert a.crop(box).tobytes() == b.crop(box).tobytes()
+    # 1-bit with no error-diffusion speckle: the body column contains only full black/white
+    img = _render(sample_items()[:1]).convert("L")
+    assert set(img.tobytes()) <= {0, 255}
 
 
-def test_sprite_frames_are_well_formed_and_vary():
-    for name, rows in sprites.FRAMES.items():
-        assert len(rows) == sprites.HEIGHT
-        assert all(len(r) == sprites.W for r in rows), name
-    assert len({tuple(f) for f in sprites.FRAMES.values()}) == len(sprites.FRAMES)
-    assert sprites.frame_for_tag("products") != sprites.frame_for_tag("engineering")
-    assert sprites.frame_for_tag("unknown-tag") == "read"
-    assert sprites.sprite_image("read").size == sprites.SIZE
+def test_no_decorative_column_text_uses_full_width():
+    img = _render(sample_items())
+    ink = ImageChops.invert(img.convert("L"))
+    body = ink.crop((0, 150, 384, img.height - 100))
+    left, _, right, _ = body.getbbox()
+    assert left <= render.PAD + 4  # text starts within the left padding
+    assert right >= 384 - render.PAD - 40  # and runs close to the right edge
+    # no vertical column rule: no full-height ink column in the body
+    for x in range(384):
+        col = ink.crop((x, 150, x + 1, img.height - 100))
+        assert col.histogram()[255] < (img.height - 250) * 0.9
 
 
-def test_margin_has_ink_for_every_item():
-    img = _render(sample_items()).convert("L")
-    margin = ImageChops.invert(img.crop((render.PAD, 150, render.PAD + render.MARGIN_W, img.height)))
-    assert margin.getbbox() is not None
-    assert isinstance(img, Image.Image)
+def test_trailing_paper_is_modest():
+    img = _render(sample_items())
+    bbox = ImageChops.invert(img.convert("L")).getbbox()
+    assert 20 <= img.height - bbox[3] <= 70
 
 
 @pytest.mark.parametrize("slug", ["products", "engineering", "psychology", "learning", "custom"])
 def test_every_tag_renders(slug):
     assert _render([_item(0, slug=slug)]).width == 384
-
-
-def test_newsie_frames_and_walk_cycle():
-    assert len(sprites.WALK_CYCLE) >= 3
-    assert len({tuple(sprites.FRAMES[n]) for n in sprites.WALK_CYCLE}) == len(sprites.WALK_CYCLE)
-    assert all(n in sprites.FRAMES for n in ("wave", "read", "surprised", "thinking", "tinker"))
-    assert sprites.frame_for_tag("products") == "surprised"
-    assert sprites.frame_for_tag("psychology") == sprites.frame_for_tag("learning") == "thinking"
-    assert sprites.frame_for_tag("engineering") == "tinker"
-
-
-def test_sprite_art_is_pure_one_bit():
-    # shading is a regular checker pattern, never grey / error-diffused speckle
-    lum = sprites.sprite_image("read").getchannel(0)
-    assert set(lum.getdata()) <= {0, 255}
 
 
 def test_body_text_is_ragged_right():
