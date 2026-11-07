@@ -66,7 +66,7 @@ export function ReceiptMock({ items, scale = 1 }: { items: DigestItem[]; scale?:
       <View style={{ paddingHorizontal: 60 * s }}>
         <DiamondRule s={s} />
       </View>
-      <Text style={[styles.thanks, { fontSize: 12 * s }]}>That's all for today!</Text>
+      <Text style={[styles.thanks, { fontSize: 12 * s }]}>That&apos;s all for today!</Text>
       <Text style={[styles.foot, { fontSize: 11 * s, marginBottom: 12 * s }]}>Full stories in the app</Text>
     </View>
   );

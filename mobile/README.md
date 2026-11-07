@@ -24,9 +24,24 @@ npx expo start --dev-client # later runs: start Metro and open the installed dev
 ```
 
 Point the app at the backend: open **Settings > Connection**, set the Backend URL
-(default `http://192.168.1.100:8000`, use your machine's LAN IP; Android emulator: `http://10.0.2.2:8000`),
+(default `http://localhost:8000`, which works over USB with `adb reverse tcp:8000 tcp:8000`; on Wi-Fi use your machine's LAN IP, e.g. `http://192.168.1.50:8000`; Android emulator: `http://10.0.2.2:8000`),
 then "Test connection". The backend must bind to `0.0.0.0` (`TNP_API_HOST`). Cleartext HTTP is enabled
 for LAN use.
+
+Start the backend on the host with `cd backend && uv run python -m tnp.api` (it must listen on `0.0.0.0:8000`).
+
+### Installing the debug APK on a phone
+
+```bash
+npx expo prebuild --platform android --clean
+cd android && ./gradlew assembleDebug      # APK: android/app/build/outputs/apk/debug/app-debug.apk (~245 MB, all ABIs)
+adb install -r app/build/outputs/apk/debug/app-debug.apk   # phone needs USB debugging on
+adb reverse tcp:8081 tcp:8081              # debug builds load JS from Metro: run `npx expo start --dev-client`
+```
+
+Android 12+ is needed for wallpaper-based Material You dynamic colors (older versions fall back to a static palette).
+Some OEM phones (e.g. OnePlus) reject adb installs with `INSTALL_FAILED_VERIFICATION_FAILURE`; allow
+"Install via USB" in Developer options or accept the prompt on the phone.
 
 No backend yet? Turn on **Settings > Connection > Use demo data**.
 
