@@ -111,7 +111,8 @@ Base URL configurable in the app (default `http://<lan-ip>:8000`). JSON everywhe
 | `GET /settings` | | `Settings` |
 | `GET /models` | | `ModelOption[]` — curated OpenRouter models for the picker (free text still allowed) |
 | `PATCH /settings` | partial `Settings` | `Settings` |
-| `GET /digest/preview` | | `DigestItem[]` — next print batch (wired at integration; A returns 501 until then) |
+| `GET /digest/preview` | | `DigestItem[]` — next print batch (limits, dedup vs. printed) |
+| `POST /ai/process` | `?limit=40` | `{summarized, flagged_political, failed, skipped_no_key}` — summarize pending articles now |
 | `GET /print/preview.png` | | `image/png`, 384px wide (Phase 3/5; A returns 501) |
 | `POST /print` | | `PrintRecord` (Phase 3/5; A returns 501) |
 

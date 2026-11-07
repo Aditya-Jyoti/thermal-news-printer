@@ -8,7 +8,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from tnp.models import ArticleForAI, PoliticsVerdict, SummaryResult
 
-from .client import AIError, chat
+from .client import AIError, chat, try_models
 from .politics import POLITICS_RULES, parse_verdict_json
 
 log = logging.getLogger(__name__)
@@ -85,22 +85,30 @@ def clean_tldr(raw: str, max_chars: int = MAX_TLDR_CHARS) -> str:
     return _truncate(t, max_chars)
 
 
-def summarize(article: ArticleForAI, *, client, model: str) -> SummaryResult:
-    raw = chat(client, model=model, system=SUMMARY_SYSTEM_PROMPT, user=_article_block(article), max_tokens=120)
-    tldr = clean_tldr(raw)
-    if not tldr:
-        raise AIError("model returned no usable TL;DR")
-    return SummaryResult(article_id=article.id, tldr=tldr, model=model)
+def summarize(
+    article: ArticleForAI, *, client, model: str, fallback_model: str | None = None
+) -> SummaryResult:
+    """TL;DR via `model`; on AIError retry once with `fallback_model`. result.model = model used."""
+
+    def attempt(m: str) -> SummaryResult:
+        raw = chat(client, model=m, system=SUMMARY_SYSTEM_PROMPT, user=_article_block(article), max_tokens=120)
+        tldr = clean_tldr(raw)
+        if not tldr:
+            raise AIError("model returned no usable TL;DR")
+        return SummaryResult(article_id=article.id, tldr=tldr, model=m)
+
+    return try_models([model, fallback_model or ""], attempt)
 
 
 def summarize_many(
-    articles: list[ArticleForAI], *, client, model: str, concurrency: int = 4
+    articles: list[ArticleForAI], *, client, model: str, concurrency: int = 4,
+    fallback_model: str | None = None,
 ) -> list[SummaryResult]:
     """Summarize concurrently; per-article failures are logged and skipped. Input order is preserved."""
 
     def one(a: ArticleForAI) -> SummaryResult | None:
         try:
-            return summarize(a, client=client, model=model)
+            return summarize(a, client=client, model=model, fallback_model=fallback_model)
         except Exception as e:  # noqa: BLE001 - one bad article must not sink the batch
             log.warning("summarize failed for article %s: %s", a.id, e)
             return None
@@ -124,13 +132,20 @@ def _extract_json(raw: str) -> dict | None:
 
 
 def summarize_and_classify(
-    article: ArticleForAI, *, client, model: str
+    article: ArticleForAI, *, client, model: str, fallback_model: str | None = None
 ) -> tuple[SummaryResult, PoliticsVerdict]:
-    """One call returning both the TL;DR and the politics verdict (cheaper than two calls)."""
-    raw = chat(client, model=model, system=COMBINED_SYSTEM_PROMPT, user=_article_block(article), max_tokens=300)
-    data = _extract_json(raw)
-    tldr = clean_tldr(str(data.get("tldr", ""))) if data else ""
-    if not tldr:
-        raise AIError("combined response had no usable tldr")
-    verdict = parse_verdict_json(raw, article.id)
-    return SummaryResult(article_id=article.id, tldr=tldr, model=model), verdict
+    """One call returning both the TL;DR and the politics verdict (cheaper than two calls).
+
+    On AIError the call is retried once with `fallback_model`; result.model records the model used.
+    """
+
+    def attempt(m: str) -> tuple[SummaryResult, PoliticsVerdict]:
+        raw = chat(client, model=m, system=COMBINED_SYSTEM_PROMPT, user=_article_block(article), max_tokens=300)
+        data = _extract_json(raw)
+        tldr = clean_tldr(str(data.get("tldr", ""))) if data else ""
+        if not tldr:
+            raise AIError("combined response had no usable tldr")
+        verdict = parse_verdict_json(raw, article.id)
+        return SummaryResult(article_id=article.id, tldr=tldr, model=m), verdict
+
+    return try_models([model, fallback_model or ""], attempt)

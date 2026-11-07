@@ -4,6 +4,7 @@ from __future__ import annotations
 import sqlite3
 
 from tnp import db
+from tnp.config import load_config
 
 DEFAULT_CATEGORIES: dict[str, list[str]] = {
     "Products": [
@@ -15,7 +16,11 @@ DEFAULT_CATEGORIES: dict[str, list[str]] = {
     "Learning": ["https://feeds.feedburner.com/bigthink/main"],
 }
 DEFAULT_SCHEDULE = ("0 8 * * *", "Morning edition")
-DEFAULT_SETTINGS = {"max_items_total": 8, "model": "google/gemma-3-12b-it"}
+DEFAULT_SETTINGS = {
+    "max_items_total": 8,
+    "model": "google/gemma-3-12b-it",
+    "fallback_model": "deepseek/deepseek-v4.1-flash",
+}
 _SEEDED_KEY = "_seeded"
 
 
@@ -34,7 +39,10 @@ def seed_defaults(conn: sqlite3.Connection) -> bool:
                 db.create_feed(conn, url, cat_id)
     if not db.list_schedules(conn):
         db.create_schedule(conn, *DEFAULT_SCHEDULE)
-    for k, v in DEFAULT_SETTINGS.items():
+    # Env (TNP_MODEL / TNP_FALLBACK_MODEL) only provides the initial values; the DB wins after.
+    cfg = load_config()
+    initial = {**DEFAULT_SETTINGS, "model": cfg.model, "fallback_model": cfg.fallback_model}
+    for k, v in initial.items():
         if db.get_setting(conn, k) is None:
             db.set_setting(conn, k, v)
     db.set_setting(conn, _SEEDED_KEY, True)

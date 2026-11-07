@@ -124,3 +124,24 @@ def test_summarize_and_classify():
 def test_summarize_and_classify_bad_json_raises():
     with pytest.raises(AIError):
         summarize_and_classify(art(), client=FakeClient("no json"), model="m")
+
+
+def test_summarize_falls_back_and_records_model():
+    c = FakeClient([openai.APIConnectionError(request=None), "Acme ships a chip."])
+    r = summarize(art(), client=c, model="primary", fallback_model="backup")
+    assert r.model == "backup" and [k["model"] for k in c.calls] == ["primary", "backup"]
+
+
+def test_summarize_no_fallback_raises_and_primary_ok_skips_fallback():
+    with pytest.raises(AIError):
+        summarize(art(), client=FakeClient([openai.APIConnectionError(request=None)]), model="p")
+    c = FakeClient("Fine.")
+    assert summarize(art(), client=c, model="p", fallback_model="b").model == "p"
+    assert len(c.calls) == 1
+
+
+def test_combined_falls_back_on_unusable_reply():
+    good = '{"political": false, "reason": "x", "tldr": "Acme ships a chip."}'
+    c = FakeClient(["garbage", good])
+    s, v = summarize_and_classify(art(), client=c, model="p", fallback_model="b")
+    assert s.model == "b" and not v.is_political
