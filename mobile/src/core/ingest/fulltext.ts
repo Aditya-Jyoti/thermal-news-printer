@@ -18,7 +18,6 @@ export function extractArticle(pageHtml: string, url?: string): { text: string; 
       // best effort
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const article = new Readability(document as any, { charThreshold: 200 }).parse();
   if (!article?.content) return null;
   const text = htmlToText(article.content);
