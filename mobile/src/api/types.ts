@@ -119,7 +119,20 @@ export interface Schedule {
 export interface Settings {
   max_items_total: number;
   model: string;
+  fallback_model: string | null;
   printer_address: string | null;
+}
+
+export interface ModelOption {
+  id: string;
+  label: string;
+}
+
+export interface AiProcessResult {
+  summarized: number;
+  flagged_political: number;
+  failed: number;
+  skipped_no_key: boolean;
 }
 
 export interface ArticleQuery {
@@ -151,6 +164,8 @@ export interface Api {
   deleteSchedule(id: number): Promise<void>;
   getSettings(): Promise<Settings>;
   patchSettings(body: Partial<Settings>): Promise<Settings>;
+  getModels(): Promise<ModelOption[]>;
+  processAi(): Promise<AiProcessResult>;
   digestPreview(): Promise<DigestItem[]>;
   /** Preview PNG URL (cache-busted). Null in demo mode (in-app mock receipt is rendered instead). */
   previewUrl(nonce: number): string | null;
