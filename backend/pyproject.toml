@@ -1,0 +1,30 @@
+[project]
+name = "tnp"
+version = "0.1.0"
+description = "termal-news-printer backend: RSS ingest, AI TL;DRs, thermal print"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "pydantic>=2.8",
+    "feedparser>=6.0",
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+    "openai>=1.40",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "respx>=0.21",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["tnp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
