@@ -13,6 +13,8 @@ import {
   toHex,
 } from '../protocol';
 import golden from './fixtures/golden.json';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DARKNESS_KEY, DEFAULT_DARKNESS, getDarkness, profileFor, setDarkness } from '../darkness';
 
 jest.mock('@react-native-async-storage/async-storage', () => {
   const store = new Map<string, string>();
@@ -25,8 +27,6 @@ jest.mock('@react-native-async-storage/async-storage', () => {
   };
 });
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DARKNESS_KEY, DEFAULT_DARKNESS, getDarkness, profileFor, setDarkness } from '../darkness';
 
 const fromHex = (h: string) => Uint8Array.from(h.match(/../g) ?? [], (x) => parseInt(x, 16));
 const bitmap = (h: number, fill: (x: number, y: number) => number): ReceiptBitmap => {
@@ -133,9 +133,9 @@ describe('darkness storage', () => {
   });
 
   it('falls back to the default when storage throws', async () => {
-    (AsyncStorage.getItem as jest.Mock<any>).mockRejectedValueOnce(new Error('boom'));
+    (AsyncStorage.getItem as any).mockRejectedValueOnce(new Error('boom'));
     expect(await getDarkness()).toBe('dark');
-    (AsyncStorage.setItem as jest.Mock<any>).mockRejectedValueOnce(new Error('boom'));
+    (AsyncStorage.setItem as any).mockRejectedValueOnce(new Error('boom'));
     await expect(setDarkness('light')).resolves.toBeUndefined();
   });
 });

@@ -29,8 +29,9 @@ const FILES: Record<FontFace, string> = {
 };
 
 export function installNodeFonts(): void {
-  setFontLoader(async (face) => {
-    const buf = fs.readFileSync(path.join(__dirname, '../../assets/fonts', FILES[face]));
+  setFontLoader(async (face, weight) => {
+    const file = weight === 'heavy' && face !== 'mast' ? FILES[face].replace('.ttf', 'Heavy.ttf') : FILES[face];
+    const buf = fs.readFileSync(path.join(__dirname, '../../assets/fonts', file));
     return Skia.Data.fromBytes(new Uint8Array(buf));
   });
 }

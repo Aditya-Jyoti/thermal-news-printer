@@ -101,6 +101,21 @@ Quirks of the **SC03h** that the reference doesn't cover (found on real hardware
 - It never sends the reference "ready" notification. It only answers *get device state* (`0xA3`). Since a job
   starts and ends with that command, the **second `0xA3` reply** marks the job as finished.
 
+**Print darkness.** Three things decide how dark a print comes out, and Settings > Printer > "Print darkness"
+(Light / Normal / Dark / Darkest, default Dark) sets all of them:
+
+- *Energy* (`0xAF`): heat per dot. Maximum (`0xFFFF`) for every level except Light.
+- *Speed* (`0xBD`, sent before the rows): the lower the number, the faster the paper moves and the lighter the
+  print. Presets are 24 / 32 / 36 / 40 for Light / Normal / Dark / Darkest. The phone-side protocol follows
+  [NaitLee/Cat-Printer](https://github.com/NaitLee/Cat-Printer), which calls `0xBD` "set speed".
+- *Ink weight* when rendering: Dark adds a thin outline to text and counts anti-aliased edge pixels as black
+  (threshold 190 instead of 150); Darkest also switches to heavier serif weights (and so may wrap a bit
+  differently). This stops thin serif hairlines from vanishing in the 1-bit conversion.
+
+"Print darkness sample" prints a short sample with a solid bar, hairlines and a dot grid at the chosen level,
+so you can compare levels on paper. If prints are still too light: charge the printer (a low battery prints
+noticeably lighter) and use genuine thermal paper.
+
 ### 6. Scheduling
 You set one or more print times in the app (e.g. 08:00 "Morning edition"). At each time, even with the app closed
 or the phone idle, the phone fetches, summarises, picks the stories, renders and prints, then shows a notification

@@ -49,3 +49,19 @@ export function makeTestBitmap(): ReceiptBitmap {
   }
   return { width: 384, height: H, pixels };
 }
+
+/** Below `bitmap`: a solid bar, 1px and 2px line groups and a dot grid, to compare darkness on paper. */
+export function withDarknessPattern(bitmap: ReceiptBitmap): ReceiptBitmap {
+  const extra = 90;
+  const h = bitmap.height + extra;
+  const pixels = new Uint8Array(W * h);
+  pixels.set(bitmap.pixels);
+  const rect = (x0: number, y0: number, w: number, hh: number) => {
+    for (let y = y0; y < y0 + hh; y++) for (let x = x0; x < x0 + w; x++) pixels[(bitmap.height + y) * W + x] = 1;
+  };
+  rect(6, 4, W - 12, 18); // solid bar
+  for (let i = 0; i < 4; i++) rect(6, 28 + i * 4, 180, 1); // 1px hairlines every 4px
+  for (let i = 0; i < 4; i++) rect(198, 28 + i * 6, 180, 2); // 2px lines
+  for (let y = 50; y < 80; y += 3) for (let x = 6; x < W - 6; x += 3) rect(x, y, 1, 1); // dot grid
+  return { width: 384, height: h, pixels };
+}
