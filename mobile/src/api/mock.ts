@@ -1,10 +1,11 @@
 import { ApiError } from './errors';
 import type {
   Api,
-  ArticleDetail,
   ArticleSummary,
   Category,
   DigestItem,
+  Edition,
+  EditionItem,
   Feed,
   PrintRecord,
   Schedule,
@@ -167,9 +168,27 @@ function nextBatch(): DigestItem[] {
     const n = counts.get(cat.id) ?? 0;
     if (n >= cat.print_limit || picked.length >= settings.max_items_total) continue;
     counts.set(cat.id, n + 1);
-    picked.push({ article_id: a.id, position: picked.length, category_slug: cat.slug, tldr: a.tldr });
+    picked.push({ article_id: a.id, position: picked.length + 1, category_slug: cat.slug, tldr: a.tldr });
   }
   return picked;
+}
+
+function mockEdition(): Edition {
+  const items = nextBatch().map((d, i): EditionItem => {
+    const a = summaryOf(articles.find((x) => x.id === d.article_id)!);
+    return {
+      position: i + 1,
+      article_id: a.id,
+      category_slug: d.category_slug,
+      category: a.category,
+      title: a.title,
+      url: a.url,
+      image_url: a.image_url,
+      published_at: a.published_at,
+      tldr: d.tldr,
+    };
+  });
+  return { items, status: { phase: 'idle', done: 0, total: 0, no_key: false }, built_at: new Date().toISOString() };
 }
 
 export function createMockApi(): Api {
@@ -231,27 +250,8 @@ export function createMockApi(): Api {
       return delay({ feeds_checked: targets.length, new_articles: 0, skipped_duplicates: targets.length * 12, flagged_political: 1, errors: {} }, 700);
     },
 
-    listArticles: async (q = {}) => {
-      const rows = articles
-        .filter((a) => {
-          if (q.category_id == null) return true;
-          return feeds.find((f) => f.id === a.feed_id)?.category_id === q.category_id;
-        })
-        .sort((a, b) => (b.published_at ?? '').localeCompare(a.published_at ?? ''));
-      const limit = q.limit ?? 50;
-      const offset = q.offset ?? 0;
-      return delay({ items: rows.slice(offset, offset + limit).map(summaryOf), total: rows.length, limit, offset });
-    },
-    getArticle: async (id) => {
-      const a = articles.find((x) => x.id === id);
-      if (!a) throw new ApiError(404, 'Article not found');
-      const d: ArticleDetail = {
-        ...summaryOf(a),
-        content_html: a.content_html,
-        content_text: a.content_html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-      };
-      return delay(d);
-    },
+    getEdition: () => delay(mockEdition()),
+    rebuildEdition: () => delay(mockEdition(), 400),
 
     listPrints: async (limit = 20, offset = 0) => {
       const rows = [...prints].sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -295,13 +295,11 @@ export function createMockApi(): Api {
         { id: 'google/gemma-3-12b-it', label: 'Gemma 3 12B (default)' },
         { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' },
       ]),
-    processAi: () => delay({ summarized: articles.filter((a) => a.tldr === null).length, flagged_political: 0, failed: 0, skipped_no_key: false }, 800),
-    digestPreview: () => delay(nextBatch()),
     previewImage: () => delay(null, 100),
     printNow: async () => {
       const items = nextBatch().map((d) => {
         const a = articles.find((x) => x.id === d.article_id);
-        return { position: d.position, article_id: d.article_id, category_slug: d.category_slug, tldr: d.tldr, title: a?.title ?? null };
+        return { position: d.position, article_id: d.article_id, category_slug: d.category_slug, tldr: d.tldr, title: a?.title ?? null, url: a?.url ?? null, image_url: a?.image_url ?? null };
       });
       if (items.length === 0) throw new ApiError(409, 'Nothing new to print');
       const rec: PrintRecord = { id: nextIds.print++, created_at: new Date().toISOString(), trigger: 'manual', status: 'printed', error: null, items };

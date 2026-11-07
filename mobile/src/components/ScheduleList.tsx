@@ -10,6 +10,7 @@ import { requestNotificationPermission } from '@/scheduler/native';
 
 import { EmptyView, ErrorView, LoadingView } from './common';
 import { ScheduleDialog } from './ScheduleDialog';
+import { layout } from '@/theme/layout';
 
 type Dlg = { mode: 'create' } | { mode: 'edit'; schedule: Schedule } | null;
 
@@ -45,7 +46,8 @@ export function ScheduleList({ onError }: { onError: (e: unknown) => void }) {
                   } />
                 <IconButton
                   icon="trash-can-outline"
-                  size={20}
+                  size={24}
+                  style={styles.touch}
                   accessibilityLabel="Delete schedule"
                   onPress={() => confirmDestructive('Delete schedule?', describeCron(s.cron), 'Delete', () => del.mutate(s.id, { onError }))}
                 />
@@ -81,5 +83,6 @@ export function ScheduleList({ onError }: { onError: (e: unknown) => void }) {
 
 const styles = StyleSheet.create({
   right: { flexDirection: 'row', alignItems: 'center' },
-  add: { alignSelf: 'flex-start' },
+  touch: { width: layout.touch, height: layout.touch, margin: 0 },
+  add: { alignSelf: 'flex-start', marginHorizontal: 16, marginTop: 4 },
 });

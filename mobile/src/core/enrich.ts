@@ -6,7 +6,7 @@ import { fetchFullText } from './ingest/fulltext';
 export const SHORT_THRESHOLD = 1500; // RSS bodies shorter than this get a full-text fetch
 export const MIN_GAIN = 1.3; // extracted text must be this much longer than the RSS text...
 export const MIN_GAIN_CHARS = 300; // ...and at least this many chars longer
-export const MAX_CONCURRENCY = 4;
+export const MAX_CONCURRENCY = 3;
 
 export function needsEnrichment(contentText: string | null | undefined, url: string | null | undefined): boolean {
   return !!url && /^https?:\/\//.test(url) && (contentText ?? '').trim().length < SHORT_THRESHOLD;
@@ -27,7 +27,7 @@ export interface EnrichRow {
 
 /**
  * Fetch full text for short rows and store improvements. Returns {article_id: new_text} for updated
- * rows. Never throws; DB writes happen sequentially after the (concurrent, <=4) fetches.
+ * rows. Never throws; DB writes happen sequentially after the (concurrent, <=3) fetches.
  */
 export async function enrichRows(
   db: Db,

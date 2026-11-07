@@ -19,6 +19,7 @@ import { EmptyView, ErrorView, LoadingView } from '@/components/common';
 import { FeedDialog } from '@/components/FeedDialog';
 import { confirmDestructive } from '@/lib/confirm';
 import { errorMessage } from '@/lib/format';
+import { layout } from '@/theme/layout';
 
 type CatDialog = { mode: 'create' } | { mode: 'edit'; category: Category } | null;
 type FeedDlg = { mode: 'create'; categoryId?: number } | { mode: 'edit'; feed: Feed } | null;
@@ -131,6 +132,6 @@ export default function SourcesScreen() {
 
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  scroll: { padding: 16, paddingBottom: 96 },
-  fab: { position: 'absolute', right: 16, bottom: 16 },
+  scroll: { padding: layout.gutter, paddingBottom: 96 },
+  fab: { position: 'absolute', right: layout.gutter, bottom: layout.gutter },
 });

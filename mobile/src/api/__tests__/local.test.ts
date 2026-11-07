@@ -2,6 +2,7 @@ import { ApiError } from '../errors';
 import { createLocalApi } from '../local';
 import type { Api } from '../types';
 import { insertArticle, upsertSummary } from '@/core/db/articles';
+import { buildEdition, editionIdle } from '@/core/edition';
 import { seedDefaults } from '@/core/seed';
 import { createMemoryDb } from '@/core/testing/sqljs';
 import type { DeviceServices } from '@/device/contracts';
@@ -92,15 +93,6 @@ describe('local Api shapes', () => {
     await rejects(api.patchSettings({ max_items_total: 99 }), 422);
   });
 
-  it('articles pages and details', async () => {
-    const id = await summarizedArticle();
-    const page = await api.listArticles({ limit: 10 });
-    expect(page).toMatchObject({ total: 1, limit: 10, offset: 0 });
-    expect(page.items[0]).toMatchObject({ id, tldr: TLDR, printed_at: null, is_political: false });
-    expect(await api.getArticle(id)).toMatchObject({ content_text: 'body', content_html: null });
-    await rejects(api.getArticle(999), 404);
-  });
-
   it('refreshFeeds returns an IngestResult', async () => {
     const r = await api.refreshFeeds();
     expect(r.feeds_checked).toBe(5);
@@ -108,33 +100,51 @@ describe('local Api shapes', () => {
     await rejects(api.refreshFeeds(999), 404);
   });
 
-  it('processAi reports skipped_no_key without a key', async () => {
-    expect(await api.processAi()).toEqual({ summarized: 0, flagged_political: 0, failed: 0, skipped_no_key: true });
+  it('getEdition has the Feed data shape and reports a missing key', async () => {
+    expect(await api.getEdition()).toMatchObject({ items: [], status: { phase: 'idle', no_key: true }, built_at: null });
+    const id = await summarizedArticle();
+    await buildEdition(db, {}, { force: true });
+    const ed = await api.getEdition();
+    expect(ed.items).toHaveLength(1);
+    expect(ed.items[0]).toEqual({
+      position: 1,
+      article_id: id,
+      category_slug: 'products',
+      category: expect.objectContaining({ slug: 'products', name: 'Products' }),
+      title: 'Zephyr chip lands',
+      url: 'https://x.test/Zephyr chip lands',
+      image_url: null,
+      published_at: expect.any(String),
+      tldr: TLDR,
+    });
+    expect(ed.built_at).not.toBeNull();
   });
 
-  it('digestPreview, previewImage and printNow', async () => {
+  it('previewImage renders the persisted edition; printNow prints it and consumes it', async () => {
     await rejects(api.printNow(), 409, /Nothing new to print/);
-    expect(await api.digestPreview()).toEqual([]);
     const id = await summarizedArticle();
-    expect(await api.digestPreview()).toEqual([{ article_id: id, position: 1, category_slug: 'products', tldr: TLDR }]);
+    await buildEdition(db, {}, { force: true });
     expect(await api.previewImage()).toEqual({ uri: 'data:image/png;base64,QUJD1' });
 
     const rec = await api.printNow();
     expect(rec).toMatchObject({ status: 'printed', trigger: 'manual', error: null });
-    expect(rec.items[0]).toMatchObject({ article_id: id, title: 'Zephyr chip lands' });
+    expect(rec.items[0]).toMatchObject({ article_id: id, title: 'Zephyr chip lands', url: 'https://x.test/Zephyr chip lands' });
     const prints = await api.listPrints();
     expect(prints).toMatchObject({ total: 1, limit: 20, offset: 0 });
+    expect(prints.items[0].items[0].url).toBe('https://x.test/Zephyr chip lands');
     expect((await api.getPrint(rec.id)).id).toBe(rec.id);
-    expect((await api.getArticle(id)).printed_at).not.toBeNull();
+    await editionIdle(db);
+    expect((await api.getEdition()).items).toEqual([]);
     await rejects(api.printNow(), 409);
   });
 
   it('printNow surfaces printer failures as 502 and records the failed print', async () => {
     const failing = createLocalApi({ db, device: device({ printError: new Error('BLE: no printer found') }) });
     await summarizedArticle();
+    await buildEdition(db, {}, { force: true });
     await rejects(failing.printNow(), 502, /failed: BLE: no printer found/);
     expect((await failing.listPrints()).items[0]).toMatchObject({ status: 'failed', error: 'BLE: no printer found' });
-    expect(await failing.digestPreview()).toHaveLength(1); // released
+    expect((await failing.getEdition()).items).toHaveLength(1); // kept for a retry
   });
 
   it('previewImage is null when the renderer is unavailable', async () => {

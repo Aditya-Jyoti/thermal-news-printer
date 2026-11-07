@@ -5,7 +5,6 @@ import { validateCron } from '@/scheduler/cron';
 import { getDevice, type DeviceServices } from '../device/contracts';
 import type { AiClient } from '../core/ai/client';
 import type { Db } from '../core/db/adapter';
-import { getArticleDetail, listArticles } from '../core/db/articles';
 import {
   createCategory,
   createFeed,
@@ -29,7 +28,9 @@ import {
 import { Conflict, NotFound } from '../core/errors';
 import type { FetchLike } from '../core/http';
 import { runIngest } from '../core/ingest/service';
-import { buildDigest, processPending, runPrint } from '../core/pipeline';
+import { buildEdition, getEdition } from '../core/edition';
+import { timed } from '../core/perf';
+import { buildDigest, runPrint } from '../core/pipeline';
 import { ApiError } from './errors';
 import type { Api, ModelOption } from './types';
 
@@ -80,6 +81,7 @@ export function createLocalApi(opts: LocalApiOptions = {}): Api {
     }
   };
   const device = () => opts.device ?? getDevice();
+  const edDeps = { client: opts.aiClient, fetch: opts.fetch };
 
   return {
     health: async () => ({ status: 'ok' }),
@@ -106,24 +108,17 @@ export function createLocalApi(opts: LocalApiOptions = {}): Api {
     refreshFeeds: (feedId) =>
       run(async (d) => {
         const result = await runIngest(d, { feedId, fetch: opts.fetch });
-        // Summarize new articles in the background; never block the UI on AI calls.
-        void processPending(d, { fetch: opts.fetch, client: opts.aiClient }).catch(() => undefined);
+        // Re-curate in the background when something new arrived; never block the UI on AI calls.
+        void buildEdition(d, edDeps, { newArticles: result.new_articles }).catch(() => undefined);
         return result;
       }),
 
-    listArticles: (q = {}) =>
+    getEdition: () => run((d) => getEdition(d, edDeps)),
+    rebuildEdition: () =>
       run(async (d) => {
-        const limit = q.limit ?? 50;
-        const offset = q.offset ?? 0;
-        const { items, total } = await listArticles(d, {
-          categoryId: q.category_id ?? null,
-          limit,
-          offset,
-          includePolitical: q.include_political ?? false,
-        });
-        return { items, total, limit, offset };
+        void buildEdition(d, edDeps, { force: true }).catch(() => undefined);
+        return getEdition(d, edDeps);
       }),
-    getArticle: (id) => run((d) => getArticleDetail(d, id)),
 
     listPrints: (limit = 20, offset = 0) =>
       run(async (d) => {
@@ -162,13 +157,11 @@ export function createLocalApi(opts: LocalApiOptions = {}): Api {
       }),
     getModels: async () => SUPPORTED_MODELS,
 
-    processAi: () => run((d) => processPending(d, { fetch: opts.fetch, client: opts.aiClient })),
-    digestPreview: () => run((d) => buildDigest(d)),
-
     async previewImage() {
       try {
         const d = await db();
-        const rendered = await device().render(await buildDigest(d), { editionDate: new Date() });
+        const digest = await buildDigest(d);
+        const rendered = await timed('render.preview', () => device().render(digest, { editionDate: new Date() }));
         return { uri: `data:image/png;base64,${rendered.pngBase64}` };
       } catch {
         return null; // renderer unavailable: the Preview screen falls back to the in-app receipt mock
@@ -177,7 +170,7 @@ export function createLocalApi(opts: LocalApiOptions = {}): Api {
 
     printNow: () =>
       run(async (d) => {
-        const rec = await runPrint(d, 'manual', { device: opts.device });
+        const rec = await runPrint(d, 'manual', { device: opts.device, client: opts.aiClient, fetch: opts.fetch });
         if (!rec) throw new ApiError(409, 'Nothing new to print');
         if (rec.status === 'failed') throw new ApiError(502, `Print ${rec.id} failed: ${rec.error ?? 'unknown error'}`);
         return rec;

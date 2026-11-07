@@ -1,49 +1,97 @@
-import { useRouter } from 'expo-router';
-import React from 'react';
-import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import { Card, Text } from 'react-native-paper';
+import React, { useCallback, useMemo } from 'react';
+import { RefreshControl, SectionList, StyleSheet, View } from 'react-native';
+import { Text, useTheme } from 'react-native-paper';
 
-import { usePrints } from '@/api/hooks';
+import { useCategories, usePrints } from '@/api/hooks';
+import type { Category, PrintItem, PrintStatus } from '@/api/types';
 import { EmptyView, ErrorView, LoadingView } from '@/components/common';
 import { StatusChip } from '@/components/StatusChip';
+import { StoryCard } from '@/components/StoryCard';
 import { formatDateTime } from '@/lib/format';
+import { layout } from '@/theme/layout';
+
+interface Row {
+  item: PrintItem;
+  category: Category | null;
+}
+interface Section {
+  key: string;
+  title: string;
+  status: PrintStatus;
+  subtitle: string;
+  data: Row[];
+}
 
 export default function HistoryScreen() {
-  const router = useRouter();
-  const q = usePrints();
+  const theme = useTheme();
+  const q = usePrints(50);
+  const categories = useCategories();
+  const { refetch } = q;
+
+  const sections = useMemo<Section[]>(() => {
+    const bySlug = new Map((categories.data ?? []).map((c) => [c.slug, c]));
+    return (q.data?.items ?? []).map((p) => ({
+      key: String(p.id),
+      title: formatDateTime(p.created_at),
+      status: p.status,
+      subtitle: [p.trigger === 'schedule' ? 'Scheduled' : 'Manual', `${p.items.length} ${p.items.length === 1 ? 'story' : 'stories'}`, p.error]
+        .filter(Boolean)
+        .join(' · '),
+      data: p.items.map((item) => ({ item, category: bySlug.get(item.category_slug) ?? null })),
+    }));
+  }, [q.data, categories.data]);
+
+  const onRefresh = useCallback(() => void refetch(), [refetch]);
 
   if (q.isLoading) return <LoadingView />;
-  if (q.isError) return <ErrorView error={q.error} onRetry={() => q.refetch()} />;
+  if (q.isError) return <ErrorView error={q.error} onRetry={onRefresh} />;
 
   return (
-    <FlatList
-      data={q.data?.items ?? []}
-      keyExtractor={(p) => String(p.id)}
-      refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={() => void q.refetch()} />}
+    <SectionList
+      style={{ backgroundColor: theme.colors.background }}
+      sections={sections}
+      keyExtractor={(r) => `${r.item.position}-${r.item.article_id ?? r.item.tldr.length}`}
+      refreshControl={<RefreshControl refreshing={q.isRefetching} onRefresh={onRefresh} />}
       ListEmptyComponent={<EmptyView title="No prints yet" hint="Printed editions will show up here." />}
       contentContainerStyle={styles.list}
-      renderItem={({ item }) => (
-        <Card style={styles.card} onPress={() => router.push({ pathname: '/print/[id]', params: { id: String(item.id) } })}>
-          <Card.Content style={styles.content}>
-            <View style={styles.row}>
-              <Text variant="titleMedium">{formatDateTime(item.created_at)}</Text>
-              <StatusChip status={item.status} />
+      stickySectionHeadersEnabled={false}
+      ItemSeparatorComponent={Separator}
+      renderSectionHeader={({ section }) => {
+        const s = section as Section;
+        return (
+          <View style={styles.header}>
+            <View style={styles.headerText}>
+              <Text variant="titleMedium">{s.title}</Text>
+              <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
+                {s.subtitle}
+              </Text>
             </View>
-            <Text variant="bodyMedium" style={styles.meta}>
-              {item.trigger === 'schedule' ? 'Scheduled' : 'Manual'} - {item.items.length} {item.items.length === 1 ? 'item' : 'items'}
-            </Text>
-            {item.error ? <Text variant="bodySmall">{item.error}</Text> : null}
-          </Card.Content>
-        </Card>
+            <StatusChip status={s.status} />
+          </View>
+        );
+      }}
+      renderItem={({ item: r }) => (
+        <StoryCard
+          title={r.item.title ?? r.item.tldr.slice(0, 80)}
+          url={r.item.url ?? null}
+          imageUrl={r.item.image_url ?? null}
+          category={r.category ?? { id: 0, name: r.item.category_slug, color: null }}
+          tldr={r.item.tldr}
+        />
       )}
+      initialNumToRender={5}
+      maxToRenderPerBatch={5}
+      windowSize={7}
+      removeClippedSubviews
     />
   );
 }
 
+const Separator = () => <View style={styles.separator} />;
+
 const styles = StyleSheet.create({
-  list: { padding: 16, gap: 12, flexGrow: 1 },
-  card: {},
-  content: { gap: 4 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  meta: { opacity: 0.7 },
+  list: { paddingHorizontal: layout.gutter, paddingBottom: layout.gutter * 2, flexGrow: 1 },
+  separator: { height: layout.cardGap },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, minHeight: layout.touch, marginTop: 16, marginBottom: 8 },
+  headerText: { flex: 1, gap: 2 },
 });

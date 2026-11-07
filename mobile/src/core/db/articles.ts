@@ -161,27 +161,45 @@ export async function updateArticleContent(
   ]);
 }
 
-export interface PendingRow {
+export interface CandidateRow {
   id: number;
   title: string;
-  url: string;
-  content_text: string | null;
   category_slug: string;
+  content_text: string | null;
   published_at: string | null;
   fetched_at: string;
-  is_political: number | null;
 }
 
-/** Non-political articles without a summary, newest first. */
-export async function listArticlesNeedingSummary(db: Db, limit = 50): Promise<PendingRow[]> {
-  return db.all<PendingRow>(
-    'SELECT a.*, c.slug AS category_slug FROM articles a ' +
-      'JOIN feeds f ON f.id=a.feed_id JOIN categories c ON c.id=f.category_id ' +
-      'LEFT JOIN summaries s ON s.article_id=a.id ' +
-      'WHERE s.article_id IS NULL AND (a.is_political IS NULL OR a.is_political=0) ' +
+/**
+ * Curation candidates: recent (<= maxAgeDays), never-printed, not-political articles, newest first.
+ * Failed prints do not block. Categories with print_limit 0 are skipped.
+ */
+export async function listCurationCandidates(
+  db: Db,
+  { limit = 60, maxAgeDays = 4, now = new Date() }: { limit?: number; maxAgeDays?: number; now?: Date } = {},
+): Promise<CandidateRow[]> {
+  const cutoff = toIso(new Date(now.getTime() - maxAgeDays * 86_400_000));
+  return db.all<CandidateRow>(
+    'SELECT a.id, a.title, c.slug AS category_slug, a.content_text, a.published_at, a.fetched_at ' +
+      'FROM articles a JOIN feeds f ON f.id=a.feed_id JOIN categories c ON c.id=f.category_id ' +
+      'WHERE (a.is_political IS NULL OR a.is_political=0) AND c.print_limit > 0 AND f.enabled=1 ' +
+      'AND COALESCE(a.published_at, a.fetched_at) >= ? ' +
+      'AND a.id NOT IN (SELECT pi.article_id FROM print_items pi JOIN prints p ON p.id=pi.print_id ' +
+      "WHERE pi.article_id IS NOT NULL AND p.status != 'failed') " +
       'ORDER BY COALESCE(a.published_at, a.fetched_at) DESC, a.id DESC LIMIT ?',
-    [limit],
+    [cutoff, limit],
   );
+}
+
+/** Batch-set the political flag for many articles (one statement per chunk). */
+export async function setPoliticalMany(db: Db, ids: number[], isPolitical: boolean): Promise<void> {
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    await db.run(
+      `UPDATE articles SET is_political=? WHERE id IN (${chunk.map(() => '?').join(',')})`,
+      [isPolitical ? 1 : 0, ...chunk],
+    );
+  }
 }
 
 export interface DigestCandidateRow {

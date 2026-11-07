@@ -89,6 +89,8 @@ export interface PrintItem {
   category_slug: string;
   tldr: string;
   title?: string | null;
+  url?: string | null;
+  image_url?: string | null;
 }
 export interface PrintRecord {
   id: number;
@@ -128,18 +130,35 @@ export interface ModelOption {
   label: string;
 }
 
-export interface AiProcessResult {
-  summarized: number;
-  flagged_political: number;
-  failed: number;
-  skipped_no_key: boolean;
+/** One story of the upcoming (persisted, AI-curated) edition, in print order. */
+export interface EditionItem {
+  position: number;
+  article_id: number;
+  category_slug: string;
+  category: Category;
+  title: string;
+  url: string;
+  image_url: string | null;
+  published_at: string | null;
+  /** null while the summary is still being written. */
+  tldr: string | null;
 }
 
-export interface ArticleQuery {
-  category_id?: number | null;
-  limit?: number;
-  offset?: number;
-  include_political?: boolean;
+export type EditionPhase = 'idle' | 'curating' | 'summarizing';
+
+export interface EditionStatus {
+  phase: EditionPhase;
+  /** Summaries finished / expected while phase is 'summarizing'. */
+  done: number;
+  total: number;
+  /** No OpenRouter key: the edition is a plain newest-first selection and cannot be summarized. */
+  no_key: boolean;
+}
+
+export interface Edition {
+  items: EditionItem[];
+  status: EditionStatus;
+  built_at: string | null;
 }
 
 /** Full surface of the REST contract (docs/ARCHITECTURE.md). */
@@ -154,8 +173,6 @@ export interface Api {
   updateFeed(id: number, body: FeedUpdate): Promise<Feed>;
   deleteFeed(id: number): Promise<void>;
   refreshFeeds(feedId?: number | null): Promise<IngestResult>;
-  listArticles(q?: ArticleQuery): Promise<Page<ArticleSummary>>;
-  getArticle(id: number): Promise<ArticleDetail>;
   listPrints(limit?: number, offset?: number): Promise<Page<PrintRecord>>;
   getPrint(id: number): Promise<PrintRecord>;
   listSchedules(): Promise<Schedule[]>;
@@ -165,8 +182,10 @@ export interface Api {
   getSettings(): Promise<Settings>;
   patchSettings(body: Partial<Settings>): Promise<Settings>;
   getModels(): Promise<ModelOption[]>;
-  processAi(): Promise<AiProcessResult>;
-  digestPreview(): Promise<DigestItem[]>;
+  /** The persisted upcoming edition (what Feed and Preview show and what the next print uses). */
+  getEdition(): Promise<Edition>;
+  /** Re-curate the next edition now (single-flight; returns the current snapshot immediately). */
+  rebuildEdition(): Promise<Edition>;
   /**
    * The current digest rendered as the 384px receipt image, as a displayable URI (data: URI on device,
    * cache-busted http URL in remote mode). Null when no renderer is available (demo mode, renderer
