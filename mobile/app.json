@@ -37,7 +37,15 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "react-native-ble-plx",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": ["central"],
+          "neverForLocation": true,
+          "bluetoothAlwaysPermission": "Allow Thermal News to connect to your thermal receipt printer over Bluetooth."
+        }
+      ],
       "expo-sqlite",
       "expo-secure-store"
     ],
