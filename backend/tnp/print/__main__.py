@@ -1,4 +1,4 @@
-"""CLI: python -m tnp.print preview [--out f.png] [--sample] | scan | test"""
+"""CLI: python -m tnp.print preview [--out f.png] [--sample] | scan | probe | test"""
 from __future__ import annotations
 
 import argparse
@@ -35,6 +35,8 @@ def main(argv: list[str] | None = None) -> None:
     pv.add_argument("--sample", action="store_true", help="use built-in sample stories")
     sc = sub.add_parser("scan", help="scan for BLE cat printers")
     sc.add_argument("--timeout", type=float, default=8.0)
+    pr = sub.add_parser("probe", help="connect, enable notifications, query device state (no print)")
+    pr.add_argument("--address", default=None)
     ts = sub.add_parser("test", help="print a small test receipt")
     ts.add_argument("--address", default=None)
     args = p.parse_args(argv)
@@ -55,6 +57,13 @@ def main(argv: list[str] | None = None) -> None:
             print(f"{name}\t{addr}")
         if not found:
             print("no printers found")
+    elif args.cmd == "probe":
+        from tnp.print.catprinter import ble
+
+        notes = asyncio.run(ble.probe(args.address))
+        for n in notes:
+            print("notification:", n.hex())
+        print(f"probe ok, {len(notes)} notification(s)")
     else:
         from tnp.print.catprinter import print_image
         from tnp.print.samples import sample_items
