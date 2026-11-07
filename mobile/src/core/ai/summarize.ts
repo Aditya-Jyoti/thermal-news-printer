@@ -9,32 +9,40 @@ export interface SummaryResult {
   model: string;
 }
 
-export const MAX_TLDR_CHARS = 450;
-export const SUMMARY_MAX_TOKENS = 220;
-export const COMBINED_MAX_TOKENS = 340;
-export const MIN_WORDS = 25;
+export const MAX_TLDR_CHARS = 250;
+export const SUMMARY_MAX_TOKENS = 120;
+export const COMBINED_MAX_TOKENS = 240;
+export const MIN_WORDS = 12;
+export const MAX_WORDS = 45;
 export const SHORT_INPUT_CHARS = 400; // teaser-only input: do not demand a minimum length (never pad)
 
 const BANNED_RE =
   /\b(?:explor(?:es|ing)|discuss(?:es|ing)|delv(?:es|ing)|sheds? light|various|a number of|highlights? the importance|in today'?s (?:world|fast-paced)|this (?:article|post|episode|piece|essay))\b/gi;
 
 export const TLDR_RULES = `The headline is NOT printed, so the TL;DR must stand alone and name the concrete subject (company, product, person, institution or study) explicitly.
-Write 2 to 3 sentences, about 45 to 70 words, never more than 450 characters, in this order:
-1. What happened: who did what, what was found, or what launched.
-2. The key specifics from the text: numbers, names, how it works, scope, dates.
-3. One short clause on why it matters or what changes, only if the text supports it.
+Write 1 to 2 sentences, about 25 to 40 words, hard cap 250 characters:
+1. Lead with the concrete subject and what happened: who did what, what was found, or what launched.
+2. Then the single most important specific: one number, name or how it works.
+3. No background. No "why it matters" clause unless it fits in the word budget.
 Rules:
 - Never invent facts. If the text is only a short teaser, state just what it says, concretely, without padding.
 - For podcasts, essays and opinion pieces, state the actual argument or finding, not that someone talks about a topic.
 - Banned filler: explores, discusses, delves, sheds light, various, a number of, highlights the importance, in today's world, rhetorical questions, and "This article/post/episode".
 - Neutral newspaper tone, active voice. Plain text only: no markdown, emoji, quotation marks, hashtags or bullet points. Do not mention that you are summarizing.
 Good examples:
-Linear, the issue-tracking startup, launched Linear Asks, which turns Slack messages into tracked issues without leaving the chat. Teams can route requests to the right owner automatically, and the feature is included in all paid plans. It aims to cut the copy-pasting between support channels and engineering backlogs.
-A Stanford study of 2,100 adults found that people who walked 7,000 steps a day had a 47 percent lower risk of early death than those who walked 2,000. Benefits flattened beyond about 10,000 steps, suggesting the popular target is higher than needed.`;
+Linear, the issue-tracking startup, launched Linear Asks, which turns Slack messages into tracked issues and routes them to the right owner. It is included in all paid plans.
+A Stanford study of 2,100 adults found that walking 7,000 steps a day cut early-death risk by 47 percent versus 2,000 steps, with little extra benefit beyond 10,000.`;
 
 export const STRICT_NUDGE =
-  '\n\nYour previous answer was too vague or too short. Rewrite it: 2 to 3 concrete sentences (45 to 70 words), ' +
-  'name the exact subject, include specific numbers or names from the text, and avoid every banned filler word.';
+  '\n\nYour previous answer was too vague or too short. Rewrite it: 1 to 2 concrete sentences (25 to 40 words), ' +
+  'name the exact subject, include one specific number or name from the text, and avoid every banned filler word.';
+
+export const SHORTER_NUDGE =
+  '\n\nYour previous answer was too long. Rewrite it shorter: 1 to 2 sentences, 25 to 40 words, under 250 characters. ' +
+  'Subject and what happened first, then the single most important specific. Drop all background.';
+
+/** The retry nudge matching the problems found. */
+export const nudgeFor = (issues: string[]): string => (issues.length === 1 && issues[0] === 'too long' ? SHORTER_NUDGE : STRICT_NUDGE);
 
 export const SUMMARY_SYSTEM_PROMPT = `You write the digest paragraph for a tiny newspaper printed on a narrow receipt strip.
 
@@ -57,6 +65,7 @@ const wordCount = (s: string) => s.split(/\s+/).filter(Boolean).length;
 export function qualityIssues(tldr: string, inputChars = 1e6): string[] {
   const issues: string[] = [];
   if (wordCount(tldr) < MIN_WORDS && inputChars >= SHORT_INPUT_CHARS) issues.push('too short');
+  if (wordCount(tldr) > MAX_WORDS) issues.push('too long');
   const found = [...new Set([...tldr.matchAll(BANNED_RE)].map((m) => m[0].toLowerCase()))].sort();
   if (found.length) issues.push('filler: ' + found.join(', '));
   if (tldr.includes('?')) issues.push('question');
@@ -137,10 +146,11 @@ export async function summarize(article: ArticleForAI, o: ModelOpts): Promise<Su
   return tryModels([o.model, o.fallbackModel], async (m) => {
     let tldr = await ask(m, user);
     if (!tldr) throw new AIError('model returned no usable TL;DR');
-    if (qualityIssues(tldr, inChars).length) {
+    const issues = qualityIssues(tldr, inChars);
+    if (issues.length) {
       try {
         // one stricter retry on the same model
-        const retry = await ask(m, user + STRICT_NUDGE);
+        const retry = await ask(m, user + nudgeFor(issues));
         if (retry && better(score(retry, inChars), score(tldr, inChars))) tldr = retry;
       } catch (e) {
         if (!(e instanceof AIError)) throw e; // keep the first answer
@@ -178,9 +188,10 @@ export async function summarizeAndClassify(
   return tryModels([o.model, o.fallbackModel], async (m) => {
     let [tldr, raw] = await once(m, user);
     if (!tldr) throw new AIError('combined response had no usable tldr');
-    if (qualityIssues(tldr, inChars).length) {
+    const issues = qualityIssues(tldr, inChars);
+    if (issues.length) {
       try {
-        const [tldr2, raw2] = await once(m, user + STRICT_NUDGE);
+        const [tldr2, raw2] = await once(m, user + nudgeFor(issues));
         if (tldr2 && better(score(tldr2, inChars), score(tldr, inChars))) [tldr, raw] = [tldr2, raw2];
       } catch (e) {
         if (!(e instanceof AIError)) throw e; // keep the first answer
