@@ -3,6 +3,7 @@ import { PermissionsAndroid, Platform } from 'react-native';
 import { BleManager, State, type Device } from 'react-native-ble-plx';
 
 import type { PrinterDriver, PrinterInfo, ReceiptBitmap } from '../device/contracts';
+import { getDarkness, profileFor, type DarknessLevel } from './darkness';
 import { encodeBitmap } from './protocol';
 import {
   PrinterError,
@@ -19,6 +20,8 @@ import {
 } from './transport';
 
 export interface DriverOptions extends SendOptions {
+  /** Overrides the saved darkness level. */
+  darkness?: DarknessLevel;
   /** Saved printer id, used when print() gets no deviceId. */
   getSavedId?: () => string | null | undefined;
 }
@@ -169,7 +172,8 @@ export function createPrinterDriver(driverOpts: DriverOptions = {}): PrinterDriv
         if (!found.length) throw new PrinterNotFound();
         id = found[0].id;
       }
-      const data = encodeBitmap(bitmap);
+      const level = driverOpts.darkness ?? (await getDarkness());
+      const data = encodeBitmap(bitmap, { profile: profileFor(level) });
       await sendJob(new BlxConnector(m), id, data, { ...driverOpts, onProgress: opts?.onProgress ?? driverOpts.onProgress });
     },
   };
