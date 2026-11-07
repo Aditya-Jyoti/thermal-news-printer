@@ -6,12 +6,12 @@ import { Button, Text, useTheme } from 'react-native-paper';
 
 import { useEdition } from '@/api/hooks';
 import { useApi } from '@/api/provider';
-import type { DigestItem } from '@/api/types';
 import { EmptyView, ErrorView, LoadingView } from '@/components/common';
 import { EditionStatusBar, progressText } from '@/components/EditionStatusBar';
 import { PaperFrame } from '@/components/PaperFrame';
 import { PAPER_WIDTH, ReceiptMock } from '@/components/ReceiptMock';
 import { errorMessage } from '@/lib/format';
+import { previewModel } from '@/lib/previewModel';
 import { useAppSettings } from '@/state/settings';
 import { layout } from '@/theme/layout';
 
@@ -27,16 +27,10 @@ export default function PreviewScreen() {
   const paperWidth = Math.min(PAPER_WIDTH, width - layout.gutter * 2);
   const scale = paperWidth / PAPER_WIDTH;
 
-  // Exactly the persisted edition (same items, same order, same TL;DRs as the Feed): printable = summarized.
-  const digest = useMemo<DigestItem[]>(
-    () =>
-      (edition.data?.items ?? [])
-        .filter((i): i is typeof i & { tldr: string } => i.tldr !== null)
-        .map((i, idx) => ({ article_id: i.article_id, position: idx + 1, category_slug: i.category_slug, tldr: i.tldr })),
-    [edition.data],
-  );
+  // Exactly the persisted edition: summarized stories are rendered for real, the rest become placeholders.
   const status = edition.data?.status;
   const idle = status?.phase === 'idle';
+  const { ready: digest, pending } = useMemo(() => previewModel(edition.data?.items ?? [], idle ?? false), [edition.data, idle]);
   // The query key is the edition's content, so the (expensive) render only re-runs when it really changed.
   const signature = digest.map((d) => `${d.article_id}:${d.tldr.length}`).join(',');
 
@@ -70,39 +64,76 @@ export default function PreviewScreen() {
     </View>
   );
 
+  const pendingBlock =
+    pending.length > 0 ? (
+      <View>
+        <Text variant="bodySmall" style={styles.notice}>
+          {pending.length} {pending.length === 1 ? 'story is' : 'stories are'} still waiting for a summary and not in the print yet.
+        </Text>
+        <PaperFrame>
+          <ReceiptMock items={pending} scale={scale} />
+        </PaperFrame>
+      </View>
+    ) : null;
+
   let body: React.ReactNode;
   if (edition.isLoading) body = <LoadingView />;
   else if (edition.isError) body = <ErrorView error={edition.error} onRetry={refresh} />;
-  else if (digest.length === 0)
+  else if (digest.length === 0 && pending.length === 0)
     body = (
       <EmptyView
         title={busy ?? 'Nothing to preview yet'}
-        hint={busy ? undefined : 'The next edition is empty. Pull down on the Feed tab to fetch and curate stories.'}
+        hint={busy ? undefined : 'The next edition is empty. Tap "Fetch new news" on the Feed tab to fetch and curate stories.'}
       />
     );
-  else if (!idle || image.isLoading || image.isFetching) body = digest.length ? mock(false) : <LoadingView />;
+  else if (digest.length === 0)
+    // Nothing summarized: say so explicitly (progress or the error shown above), never a blank pane.
+    body = (
+      <View>
+        <Text variant="bodyMedium" style={styles.notice}>
+          {busy ?? (status?.last_error ? 'No summaries yet because of the error above.' : 'No summaries yet. They are retried on the next refresh.')}
+        </Text>
+        {pendingBlock}
+      </View>
+    );
+  else if (!idle || image.isLoading || image.isFetching)
+    body = (
+      <View>
+        {mock(false)}
+        {pendingBlock}
+      </View>
+    );
   else if (image.isError) body = <ErrorView error={image.error} onRetry={refresh} />;
-  else if (!image.data) body = mock(mode !== 'demo');
+  else if (!image.data)
+    body = (
+      <View>
+        {mock(mode !== 'demo')}
+        {pendingBlock}
+      </View>
+    );
   else if (imgError) body = <ErrorView error={imgError} onRetry={refresh} />;
   else
     body = (
-      <PaperFrame>
-        <Image
-          source={{ uri: image.data.uri }}
-          cachePolicy="none"
-          contentFit="fill"
-          style={{ width: paperWidth, aspectRatio: ratio ?? 384 / 600 }}
-          onLoad={(e) => setRatio(e.source.width / e.source.height)}
-          onError={(e) => setImgError(errorMessage(e.error))}
-        />
-      </PaperFrame>
+      <View>
+        <PaperFrame>
+          <Image
+            source={{ uri: image.data.uri }}
+            cachePolicy="none"
+            contentFit="fill"
+            style={{ width: paperWidth, aspectRatio: ratio ?? 384 / 600 }}
+            onLoad={(e) => setRatio(e.source.width / e.source.height)}
+            onError={(e) => setImgError(errorMessage(e.error))}
+          />
+        </PaperFrame>
+        {pendingBlock}
+      </View>
     );
 
   return (
     <View style={[styles.flex, { backgroundColor: theme.colors.background }]}>
       <View style={styles.toolbar}>
         <Text variant="bodyMedium" style={[styles.hint, { color: theme.colors.onSurfaceVariant }]}>
-          {digest.length} {digest.length === 1 ? 'story' : 'stories'} · exactly as it will print ({PAPER_WIDTH}px, 1-bit)
+          {digest.length} {digest.length === 1 ? 'story' : 'stories'}{pending.length ? ` (+${pending.length} pending)` : ''} · exactly as it will print ({PAPER_WIDTH}px, 1-bit)
         </Text>
         <Button mode="contained-tonal" icon="refresh" onPress={refresh} contentStyle={styles.buttonContent}>
           Refresh

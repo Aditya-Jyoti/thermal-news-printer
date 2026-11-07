@@ -4,6 +4,7 @@ import { Button, Divider, List, Snackbar } from 'react-native-paper';
 
 import { useBackendSettings, usePatchSettings, usePrintNow } from '@/api/hooks';
 import { isNotImplemented } from '@/api/errors';
+import { DiagnosticsSection } from '@/components/DiagnosticsSection';
 import { ConnectionSettings } from '@/components/ConnectionSettings';
 import { PrinterSettings } from '@/components/PrinterSettings';
 import { PrintingSettings } from '@/components/PrintingSettings';
@@ -55,6 +56,10 @@ export default function SettingsScreen() {
 
         <List.Subheader>Data source</List.Subheader>
         <ConnectionSettings onMessage={setToast} />
+        <Divider style={styles.div} />
+
+        <List.Subheader>Diagnostics</List.Subheader>
+        <DiagnosticsSection />
       </ScrollView>
       <Snackbar visible={toast !== null} onDismiss={() => setToast(null)} duration={4000}>
         {toast ?? ''}
