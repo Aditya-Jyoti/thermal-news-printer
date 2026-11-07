@@ -15,6 +15,7 @@ export const CMD_SET_QUALITY = 0xa4;
 export const CMD_PRINT_ROW_RAW = 0xa2;
 export const CMD_PRINT_ROW_RLE = 0xbf;
 export const CMD_FEED_PAPER = 0xbd;
+export const CMD_SET_SPEED = 0xbd;
 export const CMD_SET_PAPER = 0xa1;
 export const CMD_LATTICE = 0xa6;
 export const CMD_SET_ENERGY = 0xaf;
@@ -55,6 +56,12 @@ export const cmdLatticeStart = () =>
 export const cmdLatticeEnd = () =>
   frame(CMD_LATTICE, [0xaa, 0x55, 0x17, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x17]);
 export const cmdFeedPaper = (amount: number) => frame(CMD_FEED_PAPER, [amount & 0xff]);
+/**
+ * 0xBD is "set speed" in NaitLee/Cat-Printer (GPL-3.0; protocol facts only, no code copied):
+ * one byte, "the lower, the quicker"; a slower feed means longer head heating, so darker output.
+ * rbaron/catprinter sends the same opcode once after the rows and calls it feed paper.
+ */
+export const cmdSetSpeed = (speed: number) => frame(CMD_SET_SPEED, [speed & 0xff]);
 export const cmdSetPaper = () => frame(CMD_SET_PAPER, [0x30, 0x00]);
 
 function rleRun(count: number, val: number, out: number[]): void {
@@ -109,10 +116,43 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return out;
 }
 
-export function encodeRows(rows: ArrayLike<number>[], energy = DEFAULT_ENERGY, feed = DEFAULT_FEED): Uint8Array {
+export interface PrintProfile {
+  /** Thermal energy 0..0xFFFF (0xAF). Only symmetric values (0xFFFF, 0x4040) are endianness-safe. */
+  energy: number;
+  /** Speed byte sent before the lattice (0xBD). Lower = faster = lighter. 0 = do not send. */
+  speed: number;
+  /** Quality byte for 0xA4. 0x32 (50) = 200 dpi, the only value both reference projects send. */
+  quality: number;
+}
+
+export type DarknessLevel = 'light' | 'normal' | 'dark' | 'darkest';
+
+/**
+ * Presets. NaitLee's CLI maps quality 1..4 to speed 4*(q+5) = 24..36 (default 32) and uses energy
+ * 0x4000 (graphics) / 0x6000 (text); its web UI offers speeds 28..40. Energy 0xFFFF is max.
+ * Energy is kept symmetric (same value in both bytes) because rbaron sends the 16-bit value
+ * big-endian while NaitLee sends it little-endian; 0xFFFF and 0x4040 are identical either way.
+ */
+export const PROFILES: Record<DarknessLevel, PrintProfile> = {
+  light: { energy: 0x4040, speed: 24, quality: 0x32 },
+  normal: { energy: 0xffff, speed: 32, quality: 0x32 },
+  dark: { energy: 0xffff, speed: 36, quality: 0x32 },
+  darkest: { energy: 0xffff, speed: 40, quality: 0x32 },
+};
+
+/** Exactly the rbaron/catprinter envelope (no speed command): used for the golden fixtures. */
+export const REFERENCE_PROFILE: PrintProfile = { energy: DEFAULT_ENERGY, speed: 0, quality: 0x32 };
+
+export function encodeRows(
+  rows: ArrayLike<number>[],
+  energy = DEFAULT_ENERGY,
+  feed = DEFAULT_FEED,
+  profile: Pick<PrintProfile, 'speed' | 'quality'> = REFERENCE_PROFILE,
+): Uint8Array {
   return concat([
     cmdGetDevState(),
-    cmdSetQuality200dpi(),
+    frame(CMD_SET_QUALITY, [profile.quality & 0xff]),
+    ...(profile.speed ? [cmdSetSpeed(profile.speed)] : []),
     cmdSetEnergy(energy),
     cmdApplyEnergy(),
     cmdLatticeStart(),
@@ -127,8 +167,11 @@ export function encodeRows(rows: ArrayLike<number>[], energy = DEFAULT_ENERGY, f
 }
 
 export interface EncodeOptions {
+  /** Takes precedence over profile.energy. */
   energy?: number;
   feed?: number;
+  /** Default: REFERENCE_PROFILE (byte-identical to the Python reference). */
+  profile?: PrintProfile;
 }
 
 /** Full byte stream for one print job (same envelope as Python encode_image). */
@@ -136,7 +179,8 @@ export function encodeBitmap(bitmap: ReceiptBitmap, opts: EncodeOptions = {}): U
   if (bitmap.pixels.length !== bitmap.width * bitmap.height) throw new Error('bitmap pixel count mismatch');
   const rows: Uint8Array[] = [];
   for (let y = 0; y < bitmap.height; y++) rows.push(bitmap.pixels.subarray(y * bitmap.width, (y + 1) * bitmap.width));
-  return encodeRows(rows, opts.energy ?? DEFAULT_ENERGY, opts.feed ?? DEFAULT_FEED);
+  const profile = opts.profile ?? REFERENCE_PROFILE;
+  return encodeRows(rows, opts.energy ?? profile.energy, opts.feed ?? DEFAULT_FEED, profile);
 }
 
 export const toHex = (b: Uint8Array): string => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');

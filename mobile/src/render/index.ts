@@ -1,6 +1,6 @@
 import type { DigestItem } from '../api/types';
 
-export { renderReceipt } from './receipt';
+export { INK, renderReceipt, renderReceiptAt } from './receipt';
 export { loadReceiptFonts, setFontLoader } from './fonts';
 export type { ReceiptFonts } from './fonts';
 

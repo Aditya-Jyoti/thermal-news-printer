@@ -1,9 +1,19 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Button, List, Portal, ProgressBar, Snackbar, Text } from 'react-native-paper';
+import { Button, List, Portal, ProgressBar, SegmentedButtons, Snackbar, Text } from 'react-native-paper';
 
-import type { PrinterInfo } from '@/device/contracts';
-import { createPrinterDriver, makeTestBitmap } from '@/printer';
+import type { PrinterInfo, ReceiptBitmap } from '@/device/contracts';
+import {
+  DARKNESS_LEVELS,
+  DEFAULT_DARKNESS,
+  createPrinterDriver,
+  getDarkness,
+  makeTestBitmap,
+  setDarkness,
+  type DarknessLevel,
+} from '@/printer';
+import { withDarknessPattern } from '@/printer/testPattern';
+import { renderReceipt, sampleItems } from '@/render';
 
 interface Props {
   selectedId: string | null;
@@ -21,6 +31,24 @@ export function PrinterSettings({ selectedId, onSelect }: Props) {
   const [progress, setProgress] = useState<number | null>(null);
   const [snack, setSnack] = useState<string | null>(null);
   const busy = useRef(false);
+  const [darkness, setLevel] = useState<DarknessLevel>(DEFAULT_DARKNESS);
+
+  useEffect(() => {
+    let alive = true;
+    getDarkness().then((l) => {
+      if (alive) setLevel(l);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const changeDarkness = (v: string) => {
+    const l = v as DarknessLevel;
+    if (!DARKNESS_LEVELS.includes(l)) return;
+    setLevel(l);
+    void setDarkness(l);
+  };
 
   const scan = async () => {
     if (busy.current) return;
@@ -41,7 +69,7 @@ export function PrinterSettings({ selectedId, onSelect }: Props) {
     }
   };
 
-  const printTest = async () => {
+  const printJob = async (makeBitmap: () => ReceiptBitmap | Promise<ReceiptBitmap>, done: string) => {
     if (busy.current) return;
     busy.current = true;
     setProgress(0);
@@ -50,7 +78,7 @@ export function PrinterSettings({ selectedId, onSelect }: Props) {
         setSnack('Bluetooth permission denied. Enable it in system settings.');
         return;
       }
-      await driver.print(makeTestBitmap(), {
+      await driver.print(await makeBitmap(), {
         deviceId: selectedId ?? undefined,
         onProgress: (p) => {
           // The driver reports per chunk (hundreds of times): only re-render on whole-percent changes.
@@ -58,7 +86,7 @@ export function PrinterSettings({ selectedId, onSelect }: Props) {
           setProgress((prev) => (prev === next ? prev : next));
         },
       });
-      setSnack('Test page sent to the printer.');
+      setSnack(done);
     } catch (e) {
       setSnack(msg(e));
     } finally {
@@ -66,6 +94,17 @@ export function PrinterSettings({ selectedId, onSelect }: Props) {
       busy.current = false;
     }
   };
+
+  const printTest = () => printJob(makeTestBitmap, 'Test page sent to the printer.');
+  const printSample = () =>
+    printJob(async () => {
+      await setDarkness(darkness); // render + driver read the level shown on screen
+      const r = await renderReceipt(sampleItems().slice(0, 1), {
+        editionDate: new Date(),
+        editionName: `Darkness: ${darkness}`,
+      });
+      return withDarknessPattern(r.bitmap);
+    }, 'Darkness sample sent to the printer.');
 
   const selectedLabel = selectedId ? (selectedName ?? found.find((p) => p.id === selectedId)?.name ?? 'Saved printer') : null;
 
@@ -82,6 +121,21 @@ export function PrinterSettings({ selectedId, onSelect }: Props) {
           Print test page
         </Button>
       </View>
+
+      <Text variant="titleSmall">Print darkness</Text>
+      <SegmentedButtons
+        value={darkness}
+        onValueChange={changeDarkness}
+        buttons={[
+          { value: 'light', label: 'Light' },
+          { value: 'normal', label: 'Normal' },
+          { value: 'dark', label: 'Dark' },
+          { value: 'darkest', label: 'Darkest' },
+        ]}
+      />
+      <Button mode="outlined" icon="printer-check" onPress={printSample} disabled={scanning || progress !== null || !selectedId}>
+        Print darkness sample
+      </Button>
 
       {progress !== null ? <ProgressBar progress={progress} style={styles.progress} /> : null}
 
