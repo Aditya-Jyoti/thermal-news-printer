@@ -278,7 +278,7 @@ describe('createAiClient (HTTP)', () => {
     expect(headers['X-Title']).toBe('termal-news-printer');
     const body = JSON.parse(init?.body as string);
     expect(body.messages).toEqual([{ role: 'user', content: 'SYS\n\n---\n\nUSR' }]);
-    expect(body).toMatchObject({ model: 'm', max_tokens: 10, temperature: 0 });
+    expect(body).toMatchObject({ model: 'm', max_tokens: 2048, temperature: 0 });
   });
 
   it('retries 429/5xx and network errors with backoff, then succeeds', async () => {

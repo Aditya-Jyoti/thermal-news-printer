@@ -3,26 +3,30 @@
  * rules (limits, cap, dedup), only the chosen stories are enriched + summarized, and the result is persisted
  * so Feed, Preview and Print all show exactly the same thing.
  */
-import type { Edition, EditionStatus } from '../api/types';
+import type { AiKeyTestResult, Diagnostics, Edition, EditionStatus, FetchNewsResult } from '../api/types';
 import { curateWithAi } from './ai/curate';
-import { AIError, AIUnavailable, createAiClient, type AiClient } from './ai/client';
+import { AIError, AIUnavailable, createAiClient, SAFE_FALLBACK_MODEL, withSafeFallback, type AiClient } from './ai/client';
+import { clearError, getLastErrors, pickLastError, recordError } from './diagnostics';
 import { summarize } from './ai/summarize';
 import type { Db } from './db/adapter';
-import { getPrintedArticleIds, listCurationCandidates, setPoliticalMany, upsertSummary, type CandidateRow } from './db/articles';
+import { countArticles, getPrintedArticleIds, listCurationCandidates, setPoliticalMany, upsertSummary, type CandidateRow } from './db/articles';
 import { listCategories } from './db/catalog';
-import { clearEdition, getEditionBuiltAt, hasArticlesSince, listEditionItems, replaceEdition } from './db/edition';
+import { archiveEdition, clearEdition, countEditionSummarized, getEditionBuiltAt, hasArticlesSince, listEditionItems, replaceEdition } from './db/edition';
 import { getLastPrintItems } from './db/prints';
 import { getSettings } from './db/settings';
 import { selectInOrder } from './digest/order';
 import { selectDigest } from './digest/select';
 import { enrichRows } from './enrich';
+import { runIngest } from './ingest/service';
 import { emit } from './events';
 import type { FetchLike } from './http';
 import { mapLimit, timed } from './perf';
+import { redact } from './redact';
 import { getApiKey } from './secrets';
 
-export const MAX_CANDIDATES = 60;
-export const MAX_AGE_DAYS = 4;
+export const MAX_CANDIDATES = 80;
+/** Weekly / slow feeds (Pragmatic Engineer, Freakonomics) rarely have anything fresher than a couple of weeks. */
+export const MAX_AGE_DAYS = 14;
 export const CONCURRENCY = 3;
 
 export interface EditionDeps {
@@ -88,7 +92,10 @@ async function rulesOptions(db: Db) {
 export async function curateEdition(db: Db, deps: EditionDeps = {}): Promise<Curated> {
   const rules = await rulesOptions(db);
   const candidates = await listCurationCandidates(db, { limit: MAX_CANDIDATES, maxAgeDays: MAX_AGE_DAYS, now: deps.now });
-  if (candidates.length === 0) return { items: [], usedAi: false, noKey: !(await resolveClient(deps)) };
+  if (candidates.length === 0) {
+    await clearError(db, 'curate');
+    return { items: [], usedAi: false, noKey: !(await resolveClient(deps)) };
+  }
 
   const asItem = (c: CandidateRow) => ({ article_id: c.id, title: c.title, category_slug: c.category_slug });
   const fallback = (noKey: boolean): Curated => {
@@ -118,10 +125,19 @@ export async function curateEdition(db: Db, deps: EditionDeps = {}): Promise<Cur
     );
   } catch (e) {
     if (e instanceof AIUnavailable) return fallback(true);
-    if (e instanceof AIError) return fallback(false);
+    if (e instanceof AIError) {
+      console.warn(`[curate] AI curation failed (model ${rules.settings.model}): ${redact(e.message).slice(0, 200)}`);
+      await recordError(db, 'curate', `Curation failed: ${e.message}`);
+      return fallback(false);
+    }
     throw e;
   }
-  if (!verdict || verdict.picks.length === 0) return fallback(false);
+  if (!verdict || verdict.picks.length === 0) {
+    console.warn(`[curate] AI reply unusable (model ${rules.settings.model}): no picks parsed`);
+    await recordError(db, 'curate', 'Curation failed: the AI reply had no usable picks');
+    return fallback(false);
+  }
+  await clearError(db, 'curate');
 
   // Everything we sent is now checked: political ids flagged, the rest marked non-political.
   const political = new Set(verdict.political);
@@ -133,7 +149,11 @@ export async function curateEdition(db: Db, deps: EditionDeps = {}): Promise<Cur
   );
 
   const byId = new Map(candidates.map((c) => [c.id, c]));
-  const ordered = verdict.picks.map((id) => asItem(byId.get(id)!));
+  // The AI's picks come first; if limits/duplicates leave the edition short, top up with the remaining
+  // (non-political) candidates, newest first. Per-category limits stay a hard maximum.
+  const picked = new Set(verdict.picks);
+  const topUp = candidates.filter((c) => !picked.has(c.id) && !political.has(c.id));
+  const ordered = [...verdict.picks.map((id) => asItem(byId.get(id)!)), ...topUp.map(asItem)];
   return { items: selectInOrder(ordered, rules), usedAi: true, noKey: false };
 }
 
@@ -150,6 +170,8 @@ async function summarizeMissing(db: Db, deps: EditionDeps): Promise<void> {
   const settings = await getSettings(db);
   setStatus(db, { phase: 'summarizing', done: 0, total: missing.length });
   let aborted = false;
+  let failures = 0;
+  let firstFailure: string | null = null;
   await timed(`summarize x${missing.length}`, () =>
     mapLimit(missing, CONCURRENCY, async (item) => {
       if (aborted) return;
@@ -176,8 +198,11 @@ async function summarizeMissing(db: Db, deps: EditionDeps): Promise<void> {
         if (e instanceof AIUnavailable) {
           aborted = true;
           state.status.no_key = true;
-        } else if (!(e instanceof AIError)) {
-          console.warn(`summarizing article ${item.article_id} failed`);
+        } else {
+          failures += 1;
+          const msg = e instanceof Error ? e.message : String(e);
+          firstFailure ??= msg;
+          console.warn(`[summarize] article ${item.article_id} failed (model ${settings.model}): ${redact(msg).slice(0, 200)}`);
         }
       } finally {
         state.status.done += 1;
@@ -185,6 +210,11 @@ async function summarizeMissing(db: Db, deps: EditionDeps): Promise<void> {
       }
     }),
   );
+  if (failures > 0) {
+    await recordError(db, 'summarize', `Summaries failed (${failures} of ${missing.length}): ${firstFailure}`);
+  } else if (!aborted) {
+    await clearError(db, 'summarize');
+  }
 }
 
 export interface BuildOptions {
@@ -232,7 +262,9 @@ export function buildEdition(db: Db, deps: EditionDeps = {}, o: BuildOptions = {
   if (!state.inflight) {
     const p: Promise<void> = buildImpl(db, deps, o)
       .catch((e) => {
-        console.warn('edition build failed', e instanceof Error ? e.message : e);
+        const msg = e instanceof Error ? e.message : String(e);
+        console.warn('edition build failed', redact(msg));
+        return recordError(db, 'curate', `Building the edition failed: ${msg}`);
       })
       .finally(() => {
         if (state.inflight === p) state.inflight = null;
@@ -252,7 +284,64 @@ export async function getEdition(db: Db, deps: EditionDeps = {}): Promise<Editio
   const state = stateOf(db);
   const items = await listEditionItems(db);
   const noKey = !(await resolveClient(deps));
-  return { items, status: { ...state.status, no_key: noKey }, built_at: await getEditionBuiltAt(db) };
+  const lastError = pickLastError(await getLastErrors(db));
+  const { max_items_total } = await getSettings(db);
+  return {
+    items,
+    status: { ...state.status, no_key: noKey, last_error: lastError },
+    built_at: await getEditionBuiltAt(db),
+    target: max_items_total,
+  };
+}
+
+/**
+ * "Fetch new news": the current edition goes to History (Not printed), the feeds are ingested, a fresh edition
+ * is curated. With `awaitBuild: false` the (slow) curation + summaries continue in the background.
+ */
+export async function fetchNewNews(db: Db, deps: EditionDeps = {}, o: { awaitBuild?: boolean } = {}): Promise<FetchNewsResult> {
+  await editionIdle(db);
+  if (await archiveEdition(db)) emit('history');
+  emit('edition');
+  const ingest = await runIngest(db, { fetch: deps.fetch });
+  const build = buildEdition(db, deps, { force: true });
+  if (o.awaitBuild === false) {
+    void build.catch(() => undefined);
+    return { ingest, edition: await getEdition(db, deps) };
+  }
+  return { ingest, edition: await build };
+}
+
+export async function getDiagnostics(db: Db, deps: EditionDeps = {}): Promise<Diagnostics> {
+  const counts = await countArticles(db, { maxAgeDays: MAX_AGE_DAYS, now: deps.now });
+  const ed = await countEditionSummarized(db);
+  const { model, fallback_model } = await getSettings(db);
+  const hints: string[] = [];
+  if (!fallback_model || fallback_model === model) {
+    hints.push(`Fallback model is not set or equals the main model; ${SAFE_FALLBACK_MODEL} is used as the automatic fallback.`);
+  }
+  return {
+    hints,
+    last_errors: await getLastErrors(db),
+    counts: { articles: counts.articles, candidates: counts.candidates, edition_size: ed.size, summarized: ed.summarized },
+  };
 }
 
 export { clearEdition };
+
+/** One tiny request (max_tokens 5) per configured model (primary, then fallback); never throws. */
+export async function testAiKey(db: Db, deps: EditionDeps = {}): Promise<AiKeyTestResult> {
+  const client = await resolveClient(deps);
+  if (!client) return { ok: false, results: [{ model: '-', ok: false, message: 'No OpenRouter API key is set' }] };
+  const { model, fallback_model } = await getSettings(db);
+  const results: AiKeyTestResult['results'] = [];
+  for (const m of withSafeFallback([model, fallback_model])) {
+    try {
+      await client.chat({ model: m, system: 'Reply with one word.', user: 'Say ok.', maxTokens: 5, temperature: 0 });
+      results.push({ model: m, ok: true, message: 'OK' });
+    } catch (e) {
+      const status = e instanceof AIError ? e.status : undefined;
+      results.push({ model: m, ok: false, status, message: redact(e instanceof Error ? e.message : String(e)).slice(0, 200) });
+    }
+  }
+  return { ok: results.some((r) => r.ok), results };
+}

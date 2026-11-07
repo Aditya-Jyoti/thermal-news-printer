@@ -28,7 +28,11 @@ import {
 import { Conflict, NotFound } from '../core/errors';
 import type { FetchLike } from '../core/http';
 import { runIngest } from '../core/ingest/service';
-import { buildEdition, getEdition } from '../core/edition';
+import { setArticleRead } from '../core/db/articles';
+import { listHistory } from '../core/db/edition';
+import { recordError, clearError } from '../core/diagnostics';
+import { emit } from '../core/events';
+import { buildEdition, fetchNewNews, getDiagnostics, getEdition, testAiKey } from '../core/edition';
 import { timed } from '../core/perf';
 import { buildDigest, runPrint } from '../core/pipeline';
 import { ApiError } from './errors';
@@ -37,7 +41,7 @@ import type { Api, ModelOption } from './types';
 /** Curated OpenRouter models for the picker (free text still allowed). Mirrors backend SUPPORTED_MODELS. */
 export const SUPPORTED_MODELS: ModelOption[] = [
   { id: 'google/gemma-3-12b-it', label: 'Gemma 3 12B (default)' },
-  { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' },
+  { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash (thinking off)' },
 ];
 
 export interface LocalApiOptions {
@@ -108,12 +112,23 @@ export function createLocalApi(opts: LocalApiOptions = {}): Api {
     refreshFeeds: (feedId) =>
       run(async (d) => {
         const result = await runIngest(d, { feedId, fetch: opts.fetch });
-        // Re-curate in the background when something new arrived; never block the UI on AI calls.
-        void buildEdition(d, edDeps, { newArticles: result.new_articles }).catch(() => undefined);
+        // A light "check for updates": the current edition stays as it is; only missing summaries are filled in
+        // (and an empty edition is built). Rolling to a new edition is the explicit fetchNews action.
+        void buildEdition(d, edDeps, { ensureOnly: true }).catch(() => undefined);
         return result;
       }),
 
     getEdition: () => run((d) => getEdition(d, edDeps)),
+    fetchNews: () => run((d) => fetchNewNews(d, edDeps, { awaitBuild: false })),
+    listHistory: (limit = 60) => run((d) => listHistory(d, limit)),
+    setRead: (articleId, read) =>
+      run(async (d) => {
+        await setArticleRead(d, articleId, read);
+        emit('edition');
+        emit('history');
+      }),
+    getDiagnostics: () => run((d) => getDiagnostics(d, edDeps)),
+    testAiKey: () => run((d) => testAiKey(d, edDeps)),
     rebuildEdition: () =>
       run(async (d) => {
         void buildEdition(d, edDeps, { force: true }).catch(() => undefined);
@@ -162,8 +177,11 @@ export function createLocalApi(opts: LocalApiOptions = {}): Api {
         const d = await db();
         const digest = await buildDigest(d);
         const rendered = await timed('render.preview', () => device().render(digest, { editionDate: new Date() }));
+        await clearError(d, 'render');
         return { uri: `data:image/png;base64,${rendered.pngBase64}` };
-      } catch {
+      } catch (e) {
+        console.warn(`[render] preview failed: ${e instanceof Error ? e.message : String(e)}`.slice(0, 300));
+        await recordError(await db(), 'render', `Preview rendering failed: ${e instanceof Error ? e.message : String(e)}`);
         return null; // renderer unavailable: the Preview screen falls back to the in-app receipt mock
       }
     },

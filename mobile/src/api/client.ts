@@ -1,5 +1,5 @@
 import { ApiError, isNotImplemented } from './errors';
-import type { Api, ArticleSummary, DigestItem, Edition, EditionItem, Page } from './types';
+import type { Api, ArticleSummary, DigestItem, Edition, EditionItem, HistoryEdition, Page } from './types';
 
 type Query = Record<string, string | number | boolean | null | undefined>;
 
@@ -23,6 +23,10 @@ async function errorFrom(res: Response): Promise<ApiError> {
   }
   return new ApiError(res.status, detail || `HTTP ${res.status}`);
 }
+
+const unsupported = (): never => {
+  throw new ApiError(501, 'Not supported with remote backend');
+};
 
 /** Typed fetch client for the TNP REST API. */
 export function createHttpApi(rawBase: string): Api {
@@ -72,9 +76,10 @@ export function createHttpApi(rawBase: string): Api {
         image_url: a?.image_url ?? null,
         published_at: a?.published_at ?? null,
         tldr: d.tldr,
+        read_at: null,
       });
     }
-    return { items, status: { phase: 'idle', done: 0, total: 0, no_key: false }, built_at: null };
+    return { items, status: { phase: 'idle', done: 0, total: 0, no_key: false }, built_at: null, target: items.length };
   }
 
   return {
@@ -113,5 +118,39 @@ export function createHttpApi(rawBase: string): Api {
       return { uri: `${base}/print/preview.png?t=${Date.now()}` };
     },
     printNow: () => req('POST', '/print'),
+    // History is best-effort over the print log; read state, diagnostics and the key test are device-only.
+    async listHistory(limit = 60) {
+      const page = await req<Page<import('./types').PrintRecord>>('GET', '/prints', { query: { limit, offset: 0 } });
+      return page.items
+        .filter((p) => p.status === 'printed')
+        .map(
+          (p): HistoryEdition => ({
+            id: p.id,
+            created_at: p.created_at,
+            archived_at: p.created_at,
+            print_id: p.id,
+            printed: true,
+            items: p.items.map((i) => ({
+              position: i.position,
+              article_id: i.article_id,
+              category_slug: i.category_slug,
+              category: null,
+              title: i.title ?? null,
+              url: i.url ?? null,
+              image_url: i.image_url ?? null,
+              tldr: i.tldr,
+              read_at: null,
+            })),
+          }),
+        );
+    },
+    setRead: () => unsupported(),
+    async fetchNews() {
+      const ingest = await req<import('./types').IngestResult>('POST', '/feeds/refresh');
+      await req('POST', '/ai/process').catch(() => undefined);
+      return { ingest, edition: await remoteEdition() };
+    },
+    getDiagnostics: () => unsupported(),
+    testAiKey: () => unsupported(),
   };
 }

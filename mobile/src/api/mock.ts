@@ -7,6 +7,7 @@ import type {
   Edition,
   EditionItem,
   Feed,
+  HistoryEdition,
   PrintRecord,
   Schedule,
   Settings,
@@ -123,6 +124,10 @@ const prints: PrintRecord[] = [
 
 const schedules: Schedule[] = [{ id: 1, cron: '0 8 * * *', label: 'Morning edition', enabled: true }];
 let settings: Settings = { max_items_total: 8, model: 'google/gemma-3-12b-it', fallback_model: 'deepseek/deepseek-v4.1-flash', printer_address: null };
+const archivedIds = new Set<number>();
+const readAt = new Map<number, string>();
+const history: HistoryEdition[] = [];
+let nextEdition = 1;
 let nextIds = { cat: 5, feed: 6, sched: 2, print: 3 };
 
 const catView = (c: CatRow): Category => ({ ...c, feed_count: feeds.filter((f) => f.category_id === c.id).length });
@@ -161,7 +166,7 @@ function nextBatch(): DigestItem[] {
   const picked: DigestItem[] = [];
   const counts = new Map<number, number>();
   for (const a of articles) {
-    if (!a.tldr || printedAt(a.id)) continue;
+    if (!a.tldr || printedAt(a.id) || archivedIds.has(a.id)) continue;
     const feed = feeds.find((f) => f.id === a.feed_id);
     const cat = feed && cats.find((c) => c.id === feed.category_id);
     if (!cat || !feed?.enabled) continue;
@@ -186,10 +191,40 @@ function mockEdition(): Edition {
       image_url: a.image_url,
       published_at: a.published_at,
       tldr: d.tldr,
+      read_at: readAt.get(a.id) ?? null,
     };
   });
-  return { items, status: { phase: 'idle', done: 0, total: 0, no_key: false }, built_at: new Date().toISOString() };
+  return { items, status: { phase: 'idle', done: 0, total: 0, no_key: false }, built_at: new Date().toISOString(), target: settings.max_items_total };
 }
+
+/** Move the current mock batch into history (printed when `printId` is given). */
+function archiveBatch(printId: number | null): void {
+  const batch = mockEdition().items;
+  if (batch.length === 0) return;
+  const now = new Date().toISOString();
+  history.unshift({
+    id: nextEdition++,
+    created_at: now,
+    archived_at: now,
+    print_id: printId,
+    printed: printId !== null,
+    items: batch.map((i) => ({
+      position: i.position,
+      article_id: i.article_id,
+      category_slug: i.category_slug,
+      category: i.category,
+      title: i.title,
+      url: i.url,
+      image_url: i.image_url,
+      tldr: i.tldr,
+      read_at: readAt.get(i.article_id) ?? null,
+    })),
+  });
+  for (const i of batch) archivedIds.add(i.article_id);
+}
+
+const historyView = (): HistoryEdition[] =>
+  history.map((e) => ({ ...e, items: e.items.map((i) => ({ ...i, read_at: i.article_id != null ? (readAt.get(i.article_id) ?? null) : null })) }));
 
 export function createMockApi(): Api {
   return {
@@ -296,6 +331,20 @@ export function createMockApi(): Api {
         { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' },
       ]),
     previewImage: () => delay(null, 100),
+    listHistory: () => delay(clone(historyView())),
+    setRead: async (articleId, read) => {
+      if (read) readAt.set(articleId, new Date().toISOString());
+      else readAt.delete(articleId);
+      return delay(undefined, 50);
+    },
+    fetchNews: async () => {
+      archiveBatch(null);
+      const edition = mockEdition();
+      return delay({ ingest: { feeds_checked: 5, new_articles: 0, skipped_duplicates: 60, flagged_political: 0, errors: {} }, edition: clone(edition) }, 700);
+    },
+    getDiagnostics: () =>
+      delay({ last_errors: {}, counts: { articles: articles.length, candidates: articles.length, edition_size: mockEdition().items.length, summarized: mockEdition().items.length } }),
+    testAiKey: () => delay({ ok: true, results: [{ model: settings.model, ok: true, message: 'OK (demo)' }] }, 400),
     printNow: async () => {
       const items = nextBatch().map((d) => {
         const a = articles.find((x) => x.id === d.article_id);
@@ -303,6 +352,7 @@ export function createMockApi(): Api {
       });
       if (items.length === 0) throw new ApiError(409, 'Nothing new to print');
       const rec: PrintRecord = { id: nextIds.print++, created_at: new Date().toISOString(), trigger: 'manual', status: 'printed', error: null, items };
+      archiveBatch(rec.id);
       prints.push(rec);
       return delay(clone(rec), 900);
     },

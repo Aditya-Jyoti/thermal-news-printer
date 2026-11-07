@@ -52,7 +52,7 @@ describe('migrations', () => {
   it('sets user_version and is idempotent', async () => {
     await migrate(db);
     const v = await db.get<{ user_version: number }>('PRAGMA user_version');
-    expect(v?.user_version).toBe(2);
+    expect(v?.user_version).toBe(3);
     expect(await db.get("SELECT name FROM sqlite_master WHERE name='edition_items'")).not.toBeNull();
   });
 });

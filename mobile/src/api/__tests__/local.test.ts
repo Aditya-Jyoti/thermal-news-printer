@@ -116,6 +116,7 @@ describe('local Api shapes', () => {
       image_url: null,
       published_at: expect.any(String),
       tldr: TLDR,
+      read_at: null,
     });
     expect(ed.built_at).not.toBeNull();
   });

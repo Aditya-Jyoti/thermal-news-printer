@@ -49,8 +49,34 @@ CREATE INDEX IF NOT EXISTS idx_feeds_category ON feeds(category_id);
 CREATE INDEX IF NOT EXISTS idx_print_items_print ON print_items(print_id);
 `;
 
+/**
+ * Migration v3: read/unread + archived editions (History).
+ * `editions` only holds archived editions: the live one stays in edition_items. An edition is archived either
+ * by "Fetch new news" (print_id NULL = not printed) or by a successful print (print_id set). Archived articles
+ * are excluded from future editions. Existing printed prints are back-filled (edition id = print id).
+ */
+const V3 = `
+ALTER TABLE articles ADD COLUMN read_at TEXT NULL;
+CREATE TABLE IF NOT EXISTS editions(
+  id INTEGER PRIMARY KEY, created_at TEXT NOT NULL, archived_at TEXT NULL,
+  print_id INTEGER NULL REFERENCES prints(id) ON DELETE SET NULL);
+CREATE TABLE IF NOT EXISTS edition_archive_items(
+  edition_id INTEGER NOT NULL REFERENCES editions(id) ON DELETE CASCADE,
+  position INTEGER NOT NULL,
+  article_id INTEGER NULL REFERENCES articles(id) ON DELETE SET NULL,
+  category_slug TEXT NOT NULL, tldr TEXT NULL,
+  PRIMARY KEY(edition_id, position));
+CREATE INDEX IF NOT EXISTS idx_archive_items_article ON edition_archive_items(article_id);
+CREATE INDEX IF NOT EXISTS idx_editions_archived ON editions(archived_at);
+INSERT INTO editions(id, created_at, archived_at, print_id)
+  SELECT id, created_at, created_at, id FROM prints WHERE status='printed';
+INSERT INTO edition_archive_items(edition_id, position, article_id, category_slug, tldr)
+  SELECT pi.print_id, pi.position, pi.article_id, pi.category_slug, pi.tldr
+  FROM print_items pi JOIN prints p ON p.id=pi.print_id WHERE p.status='printed';
+`;
+
 /** Append new migrations; index + 1 is the resulting PRAGMA user_version. */
-export const MIGRATIONS: string[] = [V1, V2];
+export const MIGRATIONS: string[] = [V1, V2, V3];
 
 export async function migrate(db: Db): Promise<void> {
   await db.exec('PRAGMA foreign_keys=ON');

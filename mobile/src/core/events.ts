@@ -1,5 +1,5 @@
 /** Tiny pipeline event bus: the UI subscribes and invalidates queries instead of polling. */
-export type CoreEvent = 'edition' | 'prints' | 'feeds';
+export type CoreEvent = 'edition' | 'prints' | 'feeds' | 'history' | 'diagnostics';
 type Listener = (e: CoreEvent) => void;
 
 const listeners = new Set<Listener>();
