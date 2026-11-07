@@ -1,10 +1,12 @@
 """FastAPI application implementing the REST contract in docs/ARCHITECTURE.md."""
 from __future__ import annotations
 
+import os
 import sqlite3
+from contextlib import asynccontextmanager
 from typing import Any, Iterator
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -13,6 +15,8 @@ from tnp import db
 from tnp.api.cron import validate_cron
 from tnp.config import load_config
 from tnp.ingest.service import run_ingest
+from tnp.pipeline import ProcessResult, build_digest, process_pending
+from tnp.scheduler import Scheduler
 from tnp.models import (
     ArticleDetail,
     ArticleSummary,
@@ -29,6 +33,8 @@ from tnp.models import (
     Schedule,
     ScheduleCreate,
     ScheduleUpdate,
+    SUPPORTED_MODELS,
+    ModelOption,
     Settings,
 )
 from tnp.seed import seed_defaults
@@ -38,6 +44,7 @@ class SettingsUpdate(BaseModel):
     """Partial Settings for PATCH /settings."""
     max_items_total: int | None = Field(default=None, ge=1, le=30)
     model: str | None = None
+    fallback_model: str | None = None  # explicit null disables the fallback
     printer_address: str | None = None
 
 
@@ -55,9 +62,30 @@ def _check_cron(expr: str) -> str:
         raise HTTPException(422, str(exc)) from exc
 
 
+def _process_in_background(db_path: str) -> None:
+    conn = db.connect(db_path)
+    try:
+        process_pending(conn)
+    finally:
+        conn.close()
+
+
 def create_app(db_path: str | None = None) -> FastAPI:
     path = db_path or load_config().db_path
-    app = FastAPI(title="termal-news-printer", version="0.1.0")
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> Any:
+        sched = None
+        if os.environ.get("TNP_SCHEDULER", "1") != "0":
+            sched = Scheduler(app.state.db_path)
+            sched.start()
+        try:
+            yield
+        finally:
+            if sched:
+                sched.stop()
+
+    app = FastAPI(title="termal-news-printer", version="0.1.0", lifespan=lifespan)
     app.state.db_path = path
     app.add_middleware(
         CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
@@ -129,9 +157,11 @@ def create_app(db_path: str | None = None) -> FastAPI:
     # NOTE: must be declared before /feeds/{feed_id} routes sharing the prefix.
     @app.post("/feeds/refresh", response_model=IngestResult)
     def feeds_refresh(
-        feed_id: int | None = None, conn: sqlite3.Connection = Conn
+        background: BackgroundTasks, feed_id: int | None = None, conn: sqlite3.Connection = Conn
     ) -> IngestResult:
-        return run_ingest(conn, feed_id)
+        result = run_ingest(conn, feed_id)
+        background.add_task(_process_in_background, app.state.db_path)
+        return result
 
     @app.patch("/feeds/{feed_id}", response_model=Feed)
     def feed_update(feed_id: int, body: FeedUpdate, conn: sqlite3.Connection = Conn) -> Feed:
@@ -207,10 +237,20 @@ def create_app(db_path: str | None = None) -> FastAPI:
     def settings_patch(body: SettingsUpdate, conn: sqlite3.Connection = Conn) -> Settings:
         return db.update_settings(conn, **body.model_dump(exclude_unset=True))
 
-    # --- not wired yet (Phase 3/5 integration) ---
+    # --- digest / AI / print ---
     @app.get("/digest/preview", response_model=list[DigestItem])
-    def digest_preview() -> list[DigestItem]:
-        raise HTTPException(501, "digest preview not wired yet")
+    def digest_preview(conn: sqlite3.Connection = Conn) -> list[DigestItem]:
+        return build_digest(conn)
+
+    @app.get("/models", response_model=list[ModelOption])
+    def models() -> list[ModelOption]:
+        return SUPPORTED_MODELS
+
+    @app.post("/ai/process", response_model=ProcessResult)
+    def ai_process(
+        limit: int = Query(40, ge=1, le=200), conn: sqlite3.Connection = Conn
+    ) -> ProcessResult:
+        return process_pending(conn, limit=limit)
 
     @app.get("/print/preview.png")
     def print_preview() -> Response:

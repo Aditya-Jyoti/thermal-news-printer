@@ -53,5 +53,5 @@ def test_schedules_settings_and_stubs(client):
     assert client.get("/articles").json() == {"items": [], "total": 0, "limit": 50, "offset": 0}
     assert client.get("/articles/1").status_code == 404
     assert client.get("/prints").json()["total"] == 0
-    for method, path in (("get", "/digest/preview"), ("get", "/print/preview.png"), ("post", "/print")):
+    for method, path in (("get", "/print/preview.png"), ("post", "/print")):
         assert getattr(client, method)(path).status_code == 501
