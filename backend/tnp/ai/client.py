@@ -1,9 +1,14 @@
 """OpenRouter client built on the OpenAI SDK (OpenAI-compatible API)."""
 from __future__ import annotations
 
+import logging
 import os
+from typing import Callable, TypeVar
 
 from openai import OpenAI, OpenAIError
+
+log = logging.getLogger(__name__)
+R = TypeVar("R")
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "google/gemma-3-12b-it"
@@ -69,3 +74,32 @@ def chat(
     if not text or not text.strip():
         raise AIError("empty model response")
     return text
+
+
+def try_models(models: list[str], attempt: Callable[[str], R]) -> R:
+    """Run `attempt(model)` for each distinct model in order; return the first success.
+
+    Only AIError triggers the next model (the SDK has already retried transient errors).
+    Re-raises the last AIError if every model fails. `attempt` should embed the model it used
+    in its result so callers can record which model actually produced the text.
+    """
+    ordered = list(dict.fromkeys(m for m in models if m))
+    if not ordered:
+        raise AIError("no model configured")
+    last: AIError | None = None
+    for i, model in enumerate(ordered):
+        try:
+            return attempt(model)
+        except AIUnavailable:
+            raise
+        except AIError as e:
+            last = e
+            if i + 1 < len(ordered):
+                log.warning("model %s failed (%s); falling back to %s", model, e, ordered[i + 1])
+    assert last is not None
+    raise last
+
+
+def chat_with_fallback(client, *, models: list[str], **kwargs) -> tuple[str, str]:
+    """`chat()` over `models` in order. Returns (text, model_that_answered)."""
+    return try_models(models, lambda m: (chat(client, model=m, **kwargs), m))

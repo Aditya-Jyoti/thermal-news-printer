@@ -563,11 +563,12 @@ def get_settings(conn: sqlite3.Connection) -> Settings:
 
 
 def update_settings(conn: sqlite3.Connection, **fields: Any) -> Settings:
-    """Partial update; None values are ignored except printer_address (clearable)."""
+    """Partial update; None values are ignored except printer_address and fallback_model
+    (clearable; a null fallback_model disables the fallback)."""
     for k, v in fields.items():
         if k not in Settings.model_fields:
             continue
-        if v is None and k != "printer_address":
+        if v is None and k not in ("printer_address", "fallback_model"):
             continue
         set_setting(conn, k, v)
     return get_settings(conn)

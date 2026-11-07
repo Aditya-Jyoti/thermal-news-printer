@@ -7,7 +7,7 @@ import re
 
 from tnp.models import ArticleForAI, PoliticsVerdict
 
-from .client import chat
+from .client import chat_with_fallback
 
 log = logging.getLogger(__name__)
 
@@ -77,8 +77,13 @@ def parse_verdict_json(raw: str, article_id: int) -> PoliticsVerdict:
     return PoliticsVerdict(article_id=article_id, is_political=flag, reason=reason)
 
 
-def classify_politics(article: ArticleForAI, *, client, model: str) -> PoliticsVerdict:
+def classify_politics(
+    article: ArticleForAI, *, client, model: str, fallback_model: str | None = None
+) -> PoliticsVerdict:
     body = re.sub(r"\s+", " ", (article.content_text or "").strip())[:1500]
     user = f"Headline: {article.title}\n\nExcerpt: {body}" if body else f"Headline: {article.title}"
-    raw = chat(client, model=model, system=POLITICS_SYSTEM_PROMPT, user=user, max_tokens=60, temperature=0.0)
+    raw, _ = chat_with_fallback(
+        client, models=[model, fallback_model or ""], system=POLITICS_SYSTEM_PROMPT, user=user,
+        max_tokens=60, temperature=0.0,
+    )
     return parse_verdict_json(raw, article.id)
