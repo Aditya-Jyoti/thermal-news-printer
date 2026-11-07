@@ -68,6 +68,10 @@ Everything runs **on your Android phone**. You don't need a server.
 
 ### 4. Rendering the receipt
 - A canvas exactly **384 px wide** (48 mm at 203 dpi), as long as the content needs, **1-bit black and white**.
+- Layout: the *The Thermal Times* masthead and the date between rules, then each story's `#tag` and TL;DR separated
+  by a small diamond rule, then a short footer. There is no edition name or issue number.
+- Content keeps a 6-dot left margin and a **22-dot right margin**, because the SC03h clips the right edge of a full
+  384-dot row. The row is still sent as 48 bytes; only the drawing area is narrower (`PAD_R` in `mobile/src/render/layout.ts`).
 - Newspaper typography with serif fonts: a *Playfair Display* masthead and *Source Serif 4* body text (both SIL OFL).
   Text is thresholded, not dithered, so it prints crisp.
 - **Text only:** a plain `#tag` and the TL;DR, with no headlines, pills, boxes or illustrations.
@@ -296,12 +300,15 @@ docs/
 ```
 
 ## Status
-- ✅ Phone-only app: on-device SQLite, feed fetching, AI summaries with fallback, Skia receipt renderer
-  (pixel-matches the Python output), BLE driver (byte-identical to the reference protocol), exact-alarm scheduled
-  prints, AI-curated editions (Feed = Preview = what prints), Material You UI. App test suite: 222 tests.
-- 🧪 Being verified on real hardware: Bluetooth printing from the phone and scheduled prints in Doze (OnePlus, Android 16).
+- ✅ Phone-only app: on-device SQLite, feed fetching, AI summaries with fallback (thinking disabled), Skia receipt
+  renderer, BLE driver (byte-identical to the reference protocol) with flow control and darkness presets,
+  exact-alarm scheduled prints, AI-curated editions of a guaranteed size (Feed = Preview = what prints), read/unread,
+  Fetch new news, History grouped by day, Diagnostics, Material You UI. App test suite: 259 tests.
+- ✅ Verified on real hardware: printing from the phone to an SC03h (OnePlus, Android 16).
+- 🧪 Still being tuned on hardware: print evenness and darkness, the right-edge margin, and scheduled prints in Doze.
 - ✅ Python reference backend: ingest, enrichment, summaries, dedup, renderer, BLE printing from Linux (raw ATT for
-  dual-mode printers), REST API and scheduler. 359 tests.
+  dual-mode printers), REST API and scheduler. 360 tests. The receipt layout (no edition row, right margin) and the
+  edition rules have since moved ahead in the app.
 
 ## Credits
 - **[rbaron/catprinter](https://github.com/rbaron/catprinter)** by rbaron (MIT): the reverse-engineered BLE
