@@ -1,3 +1,4 @@
+import { describe, expect, it } from '@jest/globals';
 import type { ReceiptBitmap } from '../../device/contracts';
 import { crc8, encodeBitmap, frame, toHex } from '../protocol';
 import golden from './fixtures/golden.json';
