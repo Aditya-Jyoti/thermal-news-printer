@@ -267,7 +267,7 @@ def create_app(db_path: str | None = None) -> FastAPI:
                            category_slug=i.category_slug, tldr=i.tldr)
                 for i in record.items
             ]
-            img = printing.render_items(items, issue_no=print_id, seed=print_id)
+            img = printing.render_items(items, issue_no=print_id)
         else:
             img = printing.render_items(build_digest(conn))
         buf = io.BytesIO()
