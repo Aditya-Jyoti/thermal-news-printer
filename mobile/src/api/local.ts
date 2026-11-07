@@ -1,4 +1,6 @@
 import { isValidCron } from '@/lib/cron';
+import { rearmSoon } from '@/scheduler/arm';
+import { validateCron } from '@/scheduler/cron';
 
 import { getDevice, type DeviceServices } from '../device/contracts';
 import type { AiClient } from '../core/ai/client';
@@ -59,7 +61,11 @@ const checkFeedUrl = (url: string): string => {
 };
 const checkCron = (c: string): string => {
   if (!isValidCron(c)) throw new ApiError(422, `invalid cron expression: ${c}`);
-  return c.trim();
+  try {
+    return validateCron(c);
+  } catch (e) {
+    throw new ApiError(422, `invalid cron expression: ${e instanceof Error ? e.message : c}`);
+  }
 };
 
 /** The Api implemented on-device: SQLite + RSS + OpenRouter + renderer + BLE printer. */
@@ -127,10 +133,24 @@ export function createLocalApi(opts: LocalApiOptions = {}): Api {
     getPrint: (id) => run((d) => getPrint(d, id)),
 
     listSchedules: () => run((d) => listSchedules(d)),
-    createSchedule: (b) => run((d) => createSchedule(d, checkCron(b.cron), b.label ?? null, b.enabled ?? true)),
+    // Every schedule mutation re-arms the native alarm so edits take effect immediately.
+    createSchedule: (b) =>
+      run(async (d) => {
+        const s = await createSchedule(d, checkCron(b.cron), b.label ?? null, b.enabled ?? true);
+        rearmSoon(d);
+        return s;
+      }),
     updateSchedule: (id, b) =>
-      run((d) => updateSchedule(d, id, b.cron != null ? { ...b, cron: checkCron(b.cron) } : b)),
-    deleteSchedule: (id) => run((d) => deleteSchedule(d, id)),
+      run(async (d) => {
+        const s = await updateSchedule(d, id, b.cron != null ? { ...b, cron: checkCron(b.cron) } : b);
+        rearmSoon(d);
+        return s;
+      }),
+    deleteSchedule: (id) =>
+      run(async (d) => {
+        await deleteSchedule(d, id);
+        rearmSoon(d);
+      }),
 
     getSettings: () => run((d) => getSettings(d)),
     patchSettings: (b) =>

@@ -94,9 +94,22 @@ Quirks of the **SC03h** that the reference doesn't cover (found on real hardware
   starts and ends with that command, the **second `0xA3` reply** marks the job as finished.
 
 ### 6. Scheduling
-You set one or more print times in the app (e.g. 08:00 "Morning edition"). At each time, the phone fetches,
-summarises, picks the stories, renders and prints. The phone must be within Bluetooth range of the printer
-(about 10 m). Android's exact alarms and a battery-optimisation exemption keep scheduled prints reliable.
+You set one or more print times in the app (e.g. 08:00 "Morning edition"). At each time, even with the app closed
+or the phone idle, the phone fetches, summarises, picks the stories, renders and prints, then shows a notification
+such as "Printed 6 stories". The phone must be within Bluetooth range of the printer (about 10 m) and the printer
+switched on. A run that is more than 2 hours late is skipped rather than printing at a random time.
+
+Under the hood a single exact Android alarm is armed for the next schedule; it starts a foreground service that runs
+the whole pipeline in the background, and it is re-armed after every change, run and reboot. For this to be reliable
+you must allow, once (Settings → Print schedule shows warnings with fix buttons):
+
+1. **Alarms & reminders** (exact alarms) for Thermal News.
+2. **Notifications** (Android 13+), so you can see progress and the outcome.
+3. **Battery: Unrestricted / not optimised** for Thermal News. On OnePlus (OxygenOS) also open App info →
+   Battery usage → *Allow background activity*, and enable *Auto launch* (Settings → Apps → Auto launch), otherwise the
+   system may kill the app and swallow the alarm.
+
+Use **Run schedule now (test)** to check the whole chain end to end.
 
 ---
 

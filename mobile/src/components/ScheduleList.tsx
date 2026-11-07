@@ -6,6 +6,7 @@ import { useCreateSchedule, useDeleteSchedule, useSchedules, useUpdateSchedule }
 import type { Schedule } from '@/api/types';
 import { confirmDestructive } from '@/lib/confirm';
 import { describeCron } from '@/lib/cron';
+import { requestNotificationPermission } from '@/scheduler/native';
 
 import { EmptyView, ErrorView, LoadingView } from './common';
 import { ScheduleDialog } from './ScheduleDialog';
@@ -36,7 +37,12 @@ export function ScheduleList({ onError }: { onError: (e: unknown) => void }) {
             onPress={() => setDlg({ mode: 'edit', schedule: s })}
             right={() => (
               <View style={styles.right}>
-                <Switch value={s.enabled} onValueChange={(enabled) => update.mutate({ id: s.id, body: { enabled } }, { onError })} />
+                <Switch value={s.enabled} onValueChange={(enabled) =>
+                    update.mutate(
+                      { id: s.id, body: { enabled } },
+                      { onError, onSuccess: () => enabled && void requestNotificationPermission() },
+                    )
+                  } />
                 <IconButton
                   icon="trash-can-outline"
                   size={20}
@@ -58,7 +64,13 @@ export function ScheduleList({ onError }: { onError: (e: unknown) => void }) {
         busy={create.isPending || update.isPending}
         onDismiss={() => setDlg(null)}
         onSubmit={(v) => {
-          const done = { onSuccess: () => setDlg(null), onError };
+          const done = {
+            onSuccess: () => {
+              setDlg(null);
+              void requestNotificationPermission(); // Android 13+: needed to show scheduled-print progress
+            },
+            onError,
+          };
           if (dlg?.mode === 'edit') update.mutate({ id: dlg.schedule.id, body: v }, done);
           else create.mutate({ ...v, enabled: true }, done);
         }}

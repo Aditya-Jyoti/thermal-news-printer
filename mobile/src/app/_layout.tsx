@@ -8,15 +8,14 @@ import { ActivityIndicator, Text, useTheme } from 'react-native-paper';
 
 import { ApiProvider } from '@/api/provider';
 import { getDb } from '@/core/db';
-import { registerDevice } from '@/device/contracts';
-import { createPrinterDriver } from '@/printer';
-import { renderReceipt } from '@/render';
+import { ensureRealDevice } from '@/device/register';
+import { rearm } from '@/scheduler/arm';
 import { AppSettingsProvider } from '@/state/settings';
 import { AppThemeProvider } from '@/theme';
 
 // Real on-device services: Skia receipt renderer + BLE cat-printer driver.
 // runPrint passes settings.printer_address as deviceId; without one the driver scans for the first printer.
-registerDevice({ render: renderReceipt, printer: createPrinterDriver() });
+ensureRealDevice();
 
 /** Opens + migrates + seeds the on-device database before rendering the app. */
 function DatabaseGate({ children }: { children: React.ReactNode }) {
@@ -24,7 +23,11 @@ function DatabaseGate({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   useEffect(() => {
     getDb().then(
-      () => setState('ready'),
+      (db) => {
+        setState('ready');
+        // Re-arm the print alarm on every app start (covers edits made elsewhere and cleared alarms).
+        rearm(db).catch((e) => console.warn('rearm failed', e));
+      },
       () => setState('error'),
     );
   }, []);

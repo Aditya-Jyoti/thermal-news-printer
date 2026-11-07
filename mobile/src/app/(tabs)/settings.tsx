@@ -8,6 +8,7 @@ import { ConnectionSettings } from '@/components/ConnectionSettings';
 import { PrinterSettings } from '@/components/PrinterSettings';
 import { PrintingSettings } from '@/components/PrintingSettings';
 import { ScheduleList } from '@/components/ScheduleList';
+import { SchedulerStatus } from '@/components/SchedulerStatus';
 import { errorMessage } from '@/lib/format';
 import { useAppSettings } from '@/state/settings';
 
@@ -35,6 +36,7 @@ export default function SettingsScreen() {
         </View>
 
         <List.Subheader>Print schedule</List.Subheader>
+        <SchedulerStatus />
         <ScheduleList onError={onError} />
         <Divider style={styles.div} />
 
