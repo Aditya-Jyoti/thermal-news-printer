@@ -46,7 +46,7 @@ const cats: CatRow[] = [
 
 const feeds: Feed[] = [
   { id: 1, url: 'https://hnrss.org/launches', title: 'Hacker News: Launches', category_id: 1, enabled: true, last_fetched_at: iso(12), last_error: null },
-  { id: 2, url: 'https://techcrunch.com/startups/feed/', title: 'TechCrunch Startups', category_id: 1, enabled: true, last_fetched_at: iso(12), last_error: null },
+  { id: 2, url: 'https://techcrunch.com/category/startups/feed/', title: 'TechCrunch Startups', category_id: 1, enabled: true, last_fetched_at: iso(12), last_error: null },
   { id: 3, url: 'https://blog.pragmaticengineer.com/rss/', title: 'The Pragmatic Engineer', category_id: 2, enabled: true, last_fetched_at: iso(12), last_error: null },
   { id: 4, url: 'http://freakonomics.blogs.nytimes.com/feed/', title: 'Freakonomics', category_id: 3, enabled: true, last_fetched_at: iso(300), last_error: 'HTTP 404 fetching feed (demo error)' },
   { id: 5, url: 'https://feeds.feedburner.com/bigthink/main', title: 'Big Think', category_id: 4, enabled: true, last_fetched_at: iso(12), last_error: null },
@@ -121,7 +121,7 @@ const prints: PrintRecord[] = [
 ];
 
 const schedules: Schedule[] = [{ id: 1, cron: '0 8 * * *', label: 'Morning edition', enabled: true }];
-let settings: Settings = { max_items_total: 8, model: 'google/gemma-2-9b-it', printer_address: null };
+let settings: Settings = { max_items_total: 8, model: 'google/gemma-3-12b-it', printer_address: null };
 let nextIds = { cat: 5, feed: 6, sched: 2, print: 3 };
 
 const catView = (c: CatRow): Category => ({ ...c, feed_count: feeds.filter((f) => f.category_id === c.id).length });

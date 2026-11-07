@@ -8,14 +8,14 @@ from tnp import db
 DEFAULT_CATEGORIES: dict[str, list[str]] = {
     "Products": [
         "https://hnrss.org/launches",
-        "https://techcrunch.com/startups/feed/",
+        "https://techcrunch.com/category/startups/feed/",
     ],
     "Engineering": ["https://blog.pragmaticengineer.com/rss/"],
     "Psychology": ["http://freakonomics.blogs.nytimes.com/feed/"],
     "Learning": ["https://feeds.feedburner.com/bigthink/main"],
 }
 DEFAULT_SCHEDULE = ("0 8 * * *", "Morning edition")
-DEFAULT_SETTINGS = {"max_items_total": 8, "model": "google/gemma-2-9b-it"}
+DEFAULT_SETTINGS = {"max_items_total": 8, "model": "google/gemma-3-12b-it"}
 _SEEDED_KEY = "_seeded"
 
 

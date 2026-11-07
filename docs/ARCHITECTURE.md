@@ -30,7 +30,8 @@ and must NOT import `tnp.db`. The Orchestrator wires B into A's DB and API after
 |---|---|---|
 | `OPENROUTER_API_KEY` | — | required for AI; code must degrade gracefully when missing |
 | `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | OpenAI-compatible |
-| `TNP_MODEL` | `google/gemma-2-9b-it` | summarization model |
+| `TNP_MODEL` | `google/gemma-3-12b-it` | summarization model |
+| `TNP_FALLBACK_MODEL` | `deepseek/deepseek-v4.1-flash` | used when the primary model errors |
 | `TNP_DB_PATH` | `./data/tnp.sqlite3` | |
 | `TNP_API_HOST` / `TNP_API_PORT` | `0.0.0.0` / `8000` | |
 
@@ -69,12 +70,12 @@ All timestamps are ISO-8601 UTC strings.
 
 | Category (slug) | Feeds |
 |---|---|
-| Products (`products`) | https://hnrss.org/launches, https://techcrunch.com/startups/feed/ |
+| Products (`products`) | https://hnrss.org/launches, https://techcrunch.com/category/startups/feed/ |
 | Engineering (`engineering`) | https://blog.pragmaticengineer.com/rss/ |
 | Psychology (`psychology`) | http://freakonomics.blogs.nytimes.com/feed/ |
 | Learning (`learning`) | https://feeds.feedburner.com/bigthink/main |
 
-Default schedule: `0 8 * * *` ("Morning edition"). Default settings: `{"max_items_total": 8, "model": "google/gemma-2-9b-it"}`.
+Default schedule: `0 8 * * *` ("Morning edition"). Default settings: `{"max_items_total": 8, "model": "google/gemma-3-12b-it", "fallback_model": "deepseek/deepseek-v4.1-flash"}`.
 
 ## Deduplication rules
 1. Ingest: an article whose `fingerprint` already exists is skipped (cross-feed dedup).
@@ -108,6 +109,7 @@ Base URL configurable in the app (default `http://<lan-ip>:8000`). JSON everywhe
 | `PATCH /schedules/{id}` | `ScheduleUpdate` | `Schedule` |
 | `DELETE /schedules/{id}` | | 204 |
 | `GET /settings` | | `Settings` |
+| `GET /models` | | `ModelOption[]` — curated OpenRouter models for the picker (free text still allowed) |
 | `PATCH /settings` | partial `Settings` | `Settings` |
 | `GET /digest/preview` | | `DigestItem[]` — next print batch (wired at integration; A returns 501 until then) |
 | `GET /print/preview.png` | | `image/png`, 384px wide (Phase 3/5; A returns 501) |

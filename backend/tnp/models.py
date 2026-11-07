@@ -182,7 +182,19 @@ class Schedule(BaseModel):
     enabled: bool
 
 
+class ModelOption(BaseModel):
+    id: str  # OpenRouter model id
+    label: str
+
+
+SUPPORTED_MODELS: list[ModelOption] = [
+    ModelOption(id="google/gemma-3-12b-it", label="Gemma 3 12B (default)"),
+    ModelOption(id="deepseek/deepseek-v4.1-flash", label="DeepSeek V4.1 Flash"),
+]
+
+
 class Settings(BaseModel):
     max_items_total: int = Field(default=8, ge=1, le=30)
-    model: str = "google/gemma-2-9b-it"
+    model: str = "google/gemma-3-12b-it"
+    fallback_model: str | None = "deepseek/deepseek-v4.1-flash"  # tried when the primary fails
     printer_address: str | None = None  # BLE MAC, Phase 3

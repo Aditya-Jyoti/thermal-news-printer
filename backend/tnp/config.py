@@ -9,7 +9,7 @@ from dataclasses import dataclass
 class Config:
     openrouter_api_key: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    model: str = "google/gemma-2-9b-it"
+    model: str = "google/gemma-3-12b-it"
     db_path: str = "./data/tnp.sqlite3"
     api_host: str = "0.0.0.0"
     api_port: int = 8000

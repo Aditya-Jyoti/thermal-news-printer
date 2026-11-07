@@ -54,12 +54,12 @@ You are a testing QA sub-agent powered by Claude Haiku. Your job is to write tes
 
 ## News Curation & AI Summarization Rules
 * Default Sources and Categories: The system should initialize with the following default RSS feeds and categories:
-  * Products: https://hnrss.org/launches, https://techcrunch.com/startups/feed/
+  * Products: https://hnrss.org/launches, https://techcrunch.com/category/startups/feed/
   * Engineering: https://blog.pragmaticengineer.com/rss/
   * Psychology: http://freakonomics.blogs.nytimes.com/feed/
   * Learning: https://feeds.feedburner.com/bigthink/main
 * Content Filtering: STRICTLY non-political. Acceptable topics include new initiatives, education, scientific breakthroughs, product launches, engineering deep dives, and major breaking news.
-* AI Integration: Use the OpenAI API format configured to point to OpenRouter. Default to a lightweight, fast, and token-efficient model that benchmarks well for summarization, such as google/gemma-2-9b-it or zhipu/glm-4-flash. 
+* AI Integration: Use the OpenAI API format configured to point to OpenRouter. Default to a lightweight, fast, and token-efficient model that benchmarks well for summarization, such as google/gemma-3-12b-it (default), with deepseek/deepseek-v4.1-flash as the automatic fallback and an alternative selectable in the app.
 * Deduplication: The system must track what has already been printed. The news aggregated for the physical print must NEVER be the same as the last time it printed.
 
 ## Thermal Print Image Constraints (Backend)

@@ -6,7 +6,7 @@ import os
 from openai import OpenAI, OpenAIError
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "google/gemma-2-9b-it"
+DEFAULT_MODEL = "google/gemma-3-12b-it"
 TIMEOUT_SECONDS = 30.0
 MAX_RETRIES = 3  # SDK retries 408/409/429/5xx and connection errors with exponential backoff
 
