@@ -13,8 +13,25 @@ export const PRINTER_READY_NOTIFICATION = Uint8Array.from([0x51, 0x78, 0xae, 0x0
 const STATE_REPLY_PREFIX = [0x51, 0x78, 0xa3, 0x01];
 
 // Hardware-verified on the SC03h: 244-byte chunks time the link out, 100 bytes @ 20 ms works.
+// With flow control honoured (below) the printer can no longer be overrun, so pace at 10 ms
+// (~10 KB/s, the rate NaitLee/Cat-Printer reaches with 200-byte chunks @ 20 ms) to avoid starving it.
 export const MAX_CHUNK = 100;
-export const PACING_MS = 20;
+export const PACING_MS = 10;
+/** Give up waiting for a 'resume' after this long and carry on (a lost notification must not hang a print). */
+export const PAUSE_TIMEOUT_MS = 5_000;
+/** ATT overhead: a write-without-response carries at most MTU - 3 bytes. */
+export const ATT_OVERHEAD = 3;
+
+/**
+ * Flow control, protocol facts from NaitLee/Cat-Printer (GPL-3.0; nothing copied): the printer sends
+ * 51 78 ae 01 01 00 10 70 ff on 0xAE02 when its buffer is full (pause) and 51 78 ae 01 01 00 00 00 ff
+ * when it can take data again (resume). The latter is byte-identical to rbaron's 'ready' notification.
+ */
+export const DATA_FLOW_PAUSE = Uint8Array.from([0x51, 0x78, 0xae, 0x01, 0x01, 0x00, 0x10, 0x70, 0xff]);
+export const DATA_FLOW_RESUME = PRINTER_READY_NOTIFICATION;
+const same = (a: Uint8Array, b: Uint8Array) => a.length === b.length && b.every((v, i) => a[i] === v);
+export const isFlowPause = (b: Uint8Array) => same(b, DATA_FLOW_PAUSE);
+export const isFlowResume = (b: Uint8Array) => same(b, DATA_FLOW_RESUME);
 export const DONE_TIMEOUT_MS = 30_000;
 export const GRACE_MS = 1_000;
 export const CONNECT_ATTEMPTS = 3;
@@ -64,8 +81,8 @@ export function isJobDone(payload: Uint8Array, received: Uint8Array[]): boolean 
 
 /** A connected GATT link to a printer (adapter over ble-plx; faked in tests). */
 export interface PrinterLink {
-  /** Best effort; failures are ignored. */
-  requestMtu(mtu: number): Promise<void>;
+  /** Best effort; failures are ignored. Resolves to the negotiated MTU when known. */
+  requestMtu(mtu: number): Promise<number | void>;
   /** Subscribe to RX notifications. Returns an unsubscribe function. */
   subscribe(onData: (data: Uint8Array) => void, onError: (e: unknown) => void): Promise<() => void>;
   /** Write one chunk to TX (write without response). */
@@ -80,6 +97,7 @@ export interface Connector {
 export interface SendOptions {
   maxChunk?: number;
   pacingMs?: number;
+  pauseTimeoutMs?: number;
   doneTimeoutMs?: number;
   graceMs?: number;
   connectAttempts?: number;
@@ -115,15 +133,31 @@ export async function sendJob(c: Connector, deviceId: string, data: Uint8Array, 
   let unsubscribe: (() => void) | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await link.requestMtu(REQUESTED_MTU).catch(() => undefined);
+    const mtu = await link.requestMtu(REQUESTED_MTU).catch(() => undefined);
+    // Never exceed what the negotiated MTU allows (and the hardware-verified cap).
+    const chunkSize = Math.max(20, Math.min(o.maxChunk ?? MAX_CHUNK, typeof mtu === 'number' && mtu > 0 ? mtu - ATT_OVERHEAD : Infinity));
 
+    console.warn(`[tnp] link mtu=${mtu ?? 'unknown'} chunk=${chunkSize} pacing=${o.pacingMs ?? PACING_MS}ms`);
     const received: Uint8Array[] = [];
     let done = false;
     let linkError: unknown = null;
     let wake: (() => void) | null = null;
     const notify = () => wake?.();
+    let paused = false;
+    let allSent = false;
+    let resumeWake: (() => void) | null = null;
     unsubscribe = await link.subscribe(
       (payload) => {
+        if (isFlowPause(payload)) {
+          paused = true;
+          return;
+        }
+        if (isFlowResume(payload) && !allSent) {
+          // Mid-stream this is a resume, not 'job done'.
+          paused = false;
+          resumeWake?.();
+          return;
+        }
         received.push(payload);
         if (!done && isJobDone(payload, received)) {
           done = true;
@@ -132,21 +166,42 @@ export async function sendJob(c: Connector, deviceId: string, data: Uint8Array, 
       },
       (e) => {
         if (!done) linkError = e;
+        resumeWake?.();
         notify();
       },
     );
 
-    const parts = chunkify(data, o.maxChunk ?? MAX_CHUNK);
+    const parts = chunkify(data, chunkSize);
+    const pauseTimeout = o.pauseTimeoutMs ?? PAUSE_TIMEOUT_MS;
+    const waitWhilePaused = async () => {
+      if (!paused || linkError) return;
+      await new Promise<void>((resolve) => {
+        const t = setTimeout(() => {
+          paused = false;
+          warn(`Printer did not resume within ${pauseTimeout / 1000}s, continuing`);
+          resolve();
+        }, pauseTimeout);
+        resumeWake = () => {
+          clearTimeout(t);
+          resolve();
+        };
+      });
+      resumeWake = null;
+    };
     const pacing = o.pacingMs ?? PACING_MS;
     let sent = 0;
     o.onProgress?.({ sentBytes: 0, totalBytes: data.length });
-    for (const part of parts) {
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      await waitWhilePaused();
       if (linkError) break;
+      if (i === parts.length - 1) allSent = true; // from here a 0x00 notification means 'job done'
       await link.write(part);
       sent += part.length;
       o.onProgress?.({ sentBytes: sent, totalBytes: data.length });
       if (pacing > 0) await sleep(pacing);
     }
+    allSent = true;
     if (linkError && !done) throw new PrinterError('The printer disconnected during printing.', linkError);
 
     if (!done) {
