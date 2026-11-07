@@ -60,9 +60,10 @@ You are a testing QA sub-agent powered by Claude Haiku. Your job is to write tes
 ## News Curation & AI Summarization Rules
 * Default Sources and Categories: The system should initialize with the following default RSS feeds and categories:
   * Products: https://hnrss.org/launches, https://techcrunch.com/category/startups/feed/
-  * Engineering: https://blog.pragmaticengineer.com/rss/
-  * Psychology: http://freakonomics.blogs.nytimes.com/feed/
-  * Learning: https://feeds.feedburner.com/bigthink/main
+  * Engineering: https://www.infoq.com/feed/, https://blog.cloudflare.com/rss/, https://github.blog/engineering/feed/, https://newsletter.pragmaticengineer.com/feed
+  * Psychology: https://www.psypost.org/feed/, https://www.psychologytoday.com/us/front/feed
+  * Learning: https://bigthink.com/feed/, https://www.sciencedaily.com/rss/top/science.xml, https://www.quantamagazine.org/feed/
+  * (Replaced 2026-11-07: the original Freakonomics NYT-blog and Big Think feedburner feeds are dead — newest items 2022/2021 — and the old Pragmatic Engineer blog feed is weekly.)
 * Content Filtering: STRICTLY non-political. Acceptable topics include new initiatives, education, scientific breakthroughs, product launches, engineering deep dives, and major breaking news.
 * AI Integration: Use the OpenAI API format configured to point to OpenRouter. Default to a lightweight, fast, and token-efficient model that benchmarks well for summarization, such as google/gemma-3-12b-it (default), with deepseek/deepseek-v4.1-flash as the automatic fallback and an alternative selectable in the app.
 * Deduplication: The system must track what has already been printed. The news aggregated for the physical print must NEVER be the same as the last time it printed.
@@ -78,6 +79,7 @@ You are a testing QA sub-agent powered by Claude Haiku. Your job is to write tes
 * Purpose: To read full-length articles, view past news, and run the whole system on-device (fetch, summarize, render, print over BLE).
 * Theming: Material You. Must use dynamic colors extracted from the user's device wallpaper.
 * Feed UI: The feed shows ONLY the AI-curated edition: the stories that will be printed next (identical to the Print Preview) followed by previously printed editions — never the raw RSS firehose. News displayed in a Card format. Each card includes an image (if provided by RSS), the title, and a tag pill corresponding to its dynamically assigned category. Tapping a card opens the original article directly (in-app browser), no intermediate detail screen.
+* Freshness & Diversity: Stories must be at most 3 days old (configurable "Max story age", default 3 days). Every edition is balanced: each category that has fresh, unseen stories gets at least one slot, remaining slots go by AI interest, and within a category stories alternate between feeds (no single feed dominating).
 * Summary Length: TL;DRs are short and to the point: 1–2 sentences, about 25–40 words, naming the concrete subject and the key fact.
 * Curation: One AI call ranks the recent unprinted candidates (title + short snippet) and picks the most interesting non-political stories; code then enforces per-category limits, the overall cap and dedup. Only the chosen stories are enriched and summarized (token- and battery-efficient).
 * Dynamic Source & Category Management: The app must provide an interface to dynamically add, edit, and remove RSS feed URLs. The user must also be able to dynamically create new categories and assign feeds to them.
@@ -85,7 +87,7 @@ You are a testing QA sub-agent powered by Claude Haiku. Your job is to write tes
 * Configuration Options:
   * Schedules: Allow setting one or multiple print times per day; the app fires them with exact Android alarms and prints in the background.
   * Category Limits: Allow the user to set a preferred number of news items per category (e.g., 3 #products, 1 #psychology). Limits are applied first; a limit of 0 excludes the category entirely.
-  * Edition Size: The "max items" setting is a guaranteed count — every edition MUST contain exactly that many stories whenever enough non-political, never-shown stories exist. If category limits leave slots empty, fill them with the next most interesting stories from any category (limit > 0), and widen the time window if needed.
+  * Edition Size: The "max items" setting is a guaranteed count — every edition MUST contain exactly that many stories whenever enough non-political, never-shown stories exist. If category limits leave slots empty, fill them with the next most interesting stories from any category (limit > 0) within the max story age.
 * History/Archive: A history section where the user can browse news that was summarized and printed previously, so nothing is lost if they didn't read the physical print immediately.
 
 ## Execution Plan
