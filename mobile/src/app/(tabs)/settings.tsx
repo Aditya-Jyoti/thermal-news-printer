@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Button, Divider, List, Snackbar } from 'react-native-paper';
 
-import { usePrintNow } from '@/api/hooks';
+import { useBackendSettings, usePatchSettings, usePrintNow } from '@/api/hooks';
 import { isNotImplemented } from '@/api/errors';
 import { ConnectionSettings } from '@/components/ConnectionSettings';
+import { PrinterSettings } from '@/components/PrinterSettings';
 import { PrintingSettings } from '@/components/PrintingSettings';
 import { ScheduleList } from '@/components/ScheduleList';
 import { errorMessage } from '@/lib/format';
@@ -43,7 +44,9 @@ export default function SettingsScreen() {
 
         {mode === 'device' && (
           <>
-            {/* PrinterSettings mounted here by Orchestrator */}
+            <List.Subheader>Printer</List.Subheader>
+            <DevicePrinter onError={onError} onSaved={() => setToast('Printer saved')} />
+            <Divider style={styles.div} />
           </>
         )}
 
@@ -63,3 +66,15 @@ const styles = StyleSheet.create({
   print: { padding: 16 },
   div: { marginVertical: 12 },
 });
+
+/** Printer pairing for on-device mode: persists the chosen BLE id as Settings.printer_address. */
+function DevicePrinter({ onError, onSaved }: { onError: (e: unknown) => void; onSaved: () => void }) {
+  const settings = useBackendSettings();
+  const patch = usePatchSettings();
+  return (
+    <PrinterSettings
+      selectedId={settings.data?.printer_address ?? null}
+      onSelect={(id) => patch.mutate({ printer_address: id }, { onSuccess: onSaved, onError })}
+    />
+  );
+}

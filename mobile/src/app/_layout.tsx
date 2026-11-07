@@ -9,12 +9,14 @@ import { ActivityIndicator, Text, useTheme } from 'react-native-paper';
 import { ApiProvider } from '@/api/provider';
 import { getDb } from '@/core/db';
 import { registerDevice } from '@/device/contracts';
-import { stubDevice } from '@/device/stubs';
+import { createPrinterDriver } from '@/printer';
+import { renderReceipt } from '@/render';
 import { AppSettingsProvider } from '@/state/settings';
 import { AppThemeProvider } from '@/theme';
 
-// Orchestrator: swap stubDevice for { render, printer } from src/render and src/printer.
-registerDevice(stubDevice);
+// Real on-device services: Skia receipt renderer + BLE cat-printer driver.
+// runPrint passes settings.printer_address as deviceId; without one the driver scans for the first printer.
+registerDevice({ render: renderReceipt, printer: createPrinterDriver() });
 
 /** Opens + migrates + seeds the on-device database before rendering the app. */
 function DatabaseGate({ children }: { children: React.ReactNode }) {

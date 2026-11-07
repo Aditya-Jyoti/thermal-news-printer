@@ -7,6 +7,7 @@ import type { Settings } from '@/api/types';
 
 import { ErrorView, LoadingView } from './common';
 import { ModelPicker } from './ModelPicker';
+import { useAppSettings } from '@/state/settings';
 
 interface Handlers {
   onError: (e: unknown) => void;
@@ -27,9 +28,10 @@ function PrintingForm({ saved, onError, onSaved }: Handlers & { saved: Settings 
   const [max, setMax] = useState(saved.max_items_total);
   const [model, setModel] = useState(saved.model);
   const [fallback, setFallback] = useState<string | null>(saved.fallback_model);
+  const { mode } = useAppSettings(); // printer id is managed by PrinterSettings in on-device mode
   const [printer, setPrinter] = useState(saved.printer_address ?? '');
 
-  const dirty = max !== saved.max_items_total || model.trim() !== saved.model || (fallback?.trim() || null) !== saved.fallback_model || (printer.trim() || null) !== saved.printer_address;
+  const dirty = max !== saved.max_items_total || model.trim() !== saved.model || (fallback?.trim() || null) !== saved.fallback_model || (mode === 'remote' && (printer.trim() || null) !== saved.printer_address);
 
   return (
     <View style={styles.box}>
@@ -51,22 +53,24 @@ function PrintingForm({ saved, onError, onSaved }: Handlers & { saved: Settings 
           <ModelPicker label="Fallback model" value={fallback} onChange={setFallback} options={models.isError ? null : (models.data ?? null)} allowNone />
         </>
       )}
-      <TextInput
-        label="Printer BLE address"
-        placeholder="AA:BB:CC:DD:EE:FF"
-        value={printer}
-        onChangeText={setPrinter}
-        autoCapitalize="characters"
-        autoCorrect={false}
-        mode="outlined"
-      />
+      {mode === 'remote' && (
+        <TextInput
+          label="Printer BLE address"
+          placeholder="AA:BB:CC:DD:EE:FF"
+          value={printer}
+          onChangeText={setPrinter}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          mode="outlined"
+        />
+      )}
       <Button
         mode="contained"
         disabled={!dirty || model.trim().length === 0 || patch.isPending}
         loading={patch.isPending}
         onPress={() =>
           patch.mutate(
-            { max_items_total: max, model: model.trim(), fallback_model: fallback?.trim() || null, printer_address: printer.trim() || null },
+            { max_items_total: max, model: model.trim(), fallback_model: fallback?.trim() || null, ...(mode === 'remote' ? { printer_address: printer.trim() || null } : {}) },
             { onSuccess: onSaved, onError },
           )
         }

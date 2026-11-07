@@ -41,13 +41,16 @@
         "react-native-ble-plx",
         {
           "isBackgroundEnabled": true,
-          "modes": ["central"],
+          "modes": [
+            "central"
+          ],
           "neverForLocation": true,
           "bluetoothAlwaysPermission": "Allow Thermal News to connect to your thermal receipt printer over Bluetooth."
         }
       ],
       "expo-sqlite",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-asset"
     ],
     "experiments": {
       "reactCompiler": true
