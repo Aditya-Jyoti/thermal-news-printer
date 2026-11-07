@@ -1,0 +1,72 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="expo.modules.printscheduler" >
+4
+5    <uses-sdk android:minSdkVersion="24" />
+5-->INJECTED
+5-->INJECTED
+6
+7    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+7-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:2:3-77
+7-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:2:20-74
+8    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+8-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:3:3-79
+8-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:3:20-76
+9    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+9-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:4:3-75
+9-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:4:20-72
+10    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+10-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:5:3-92
+10-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:5:20-89
+11    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+11-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:6:3-75
+11-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:6:20-72
+12    <uses-permission android:name="android.permission.WAKE_LOCK" />
+12-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:7:3-66
+12-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:7:20-63
+13    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+13-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:8:3-93
+13-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:8:20-90
+14
+15    <application>
+15-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:10:3-30:17
+16        <receiver
+16-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:11:5-13:34
+17            android:name="expo.modules.printscheduler.AlarmReceiver"
+17-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:12:7-63
+18            android:exported="false" />
+18-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:13:7-31
+19        <receiver
+19-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:15:5-24:16
+20            android:name="expo.modules.printscheduler.BootReceiver"
+20-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:16:7-62
+21            android:exported="true" >
+21-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:17:7-30
+22            <intent-filter>
+22-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:18:7-23:23
+23                <action android:name="android.intent.action.BOOT_COMPLETED" />
+23-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:19:9-71
+23-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:19:17-68
+24                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+24-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:20:9-76
+24-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:20:17-73
+25                <action android:name="android.intent.action.TIME_SET" />
+25-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:21:9-65
+25-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:21:17-62
+26                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+26-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:22:9-73
+26-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:22:17-70
+27            </intent-filter>
+28        </receiver>
+29
+30        <service
+30-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:26:5-29:57
+31            android:name="expo.modules.printscheduler.PrintForegroundService"
+31-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:27:7-72
+32            android:exported="false"
+32-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:28:7-31
+33            android:foregroundServiceType="connectedDevice" />
+33-->/home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/AndroidManifest.xml:29:7-54
+34    </application>
+35
+36</manifest>
