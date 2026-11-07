@@ -95,9 +95,9 @@ def test_clean_tldr_keeps_inner_quotes_and_never_exceeds_cap():
 
 
 def test_clean_tldr_cuts_at_sentence_boundary_when_late_enough():
-    text = "A" * 250 + ". " + "b " * 200
+    text = "A" * 150 + ". " + "b " * 200
     out = clean_tldr(text)
-    assert out == "A" * 250 + "."
+    assert out == "A" * 150 + "."
 
 
 def test_clean_tldr_cuts_at_word_boundary_with_ellipsis():

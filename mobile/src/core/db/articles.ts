@@ -182,9 +182,10 @@ const NOT_CONSUMED =
  */
 export async function listCurationCandidates(
   db: Db,
-  { limit = 80, maxAgeDays = 14, now = new Date() }: { limit?: number; maxAgeDays?: number; now?: Date } = {},
+  { limit = 80, maxAgeDays = 14, now = new Date() }: { limit?: number; maxAgeDays?: number | null; now?: Date } = {},
 ): Promise<CandidateRow[]> {
-  const cutoff = toIso(new Date(now.getTime() - maxAgeDays * 86_400_000));
+  // maxAgeDays null = no recency limit.
+  const cutoff = maxAgeDays === null ? '0000-01-01T00:00:00.000Z' : toIso(new Date(now.getTime() - maxAgeDays * 86_400_000));
   return db.all<CandidateRow>(
     'SELECT a.id, a.title, c.slug AS category_slug, a.content_text, a.published_at, a.fetched_at ' +
       'FROM articles a JOIN feeds f ON f.id=a.feed_id JOIN categories c ON c.id=f.category_id ' +
@@ -257,4 +258,28 @@ export async function countArticles(db: Db, { maxAgeDays = 14, now = new Date() 
     [cutoff],
   );
   return { articles: a?.n ?? 0, candidates: c?.n ?? 0 };
+}
+
+export interface CategoryCounts {
+  slug: string;
+  /** all stored articles of enabled feeds. */
+  fetched: number;
+  /** unseen, non-political articles inside the window. */
+  eligible: number;
+}
+
+/** Per-category totals for Diagnostics (window null = no recency limit). */
+export async function countByCategory(
+  db: Db,
+  { maxAgeDays = 14, now = new Date() }: { maxAgeDays?: number | null; now?: Date } = {},
+): Promise<CategoryCounts[]> {
+  const cutoff = maxAgeDays === null ? '0000-01-01T00:00:00.000Z' : toIso(new Date(now.getTime() - maxAgeDays * 86_400_000));
+  return db.all<CategoryCounts>(
+    'SELECT c.slug AS slug, COUNT(a.id) AS fetched, ' +
+      'COALESCE(SUM(CASE WHEN (a.is_political IS NULL OR a.is_political=0) AND COALESCE(a.published_at, a.fetched_at) >= ? ' +
+      `AND ${NOT_CONSUMED} THEN 1 ELSE 0 END), 0) AS eligible ` +
+      'FROM categories c LEFT JOIN feeds f ON f.category_id=c.id AND f.enabled=1 LEFT JOIN articles a ON a.feed_id=f.id ' +
+      'GROUP BY c.id ORDER BY c.id',
+    [cutoff],
+  );
 }

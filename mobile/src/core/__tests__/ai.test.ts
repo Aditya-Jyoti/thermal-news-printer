@@ -7,6 +7,8 @@ import {
   MAX_TLDR_CHARS,
   qualityIssues,
   STRICT_NUDGE,
+  SHORTER_NUDGE,
+  nudgeFor,
   summarize,
   summarizeAndClassify,
   SUMMARY_SYSTEM_PROMPT,
@@ -14,8 +16,7 @@ import {
 
 const GOOD =
   'Acme Corp launched the Zephyr 2 chip, which runs language models on-device at 40 tokens per second ' +
-  'while drawing 3 watts. It ships to phone makers in March and doubles the speed of the earlier Zephyr ' +
-  'design, which could bring offline assistants to mid-range handsets.';
+  'while drawing 3 watts. It ships to phone makers in March.';
 const LONG_BODY = 'Acme details. '.repeat(100);
 
 const art = (o: Partial<ArticleForAI> = {}): ArticleForAI => ({
@@ -108,16 +109,16 @@ describe('cleanTldr', () => {
     expect(cleanTldr('TL;DR:')).toBe('');
   });
 
-  it('caps at 450 with sentence/word/hard cuts', () => {
-    expect(MAX_TLDR_CHARS).toBe(450);
+  it('caps at 250 with sentence/word/hard cuts', () => {
+    expect(MAX_TLDR_CHARS).toBe(250);
     expect(cleanTldr('He said "yes" today.')).toBe('He said "yes" today.');
-    expect(cleanTldr('word '.repeat(200)).length).toBeLessThanOrEqual(450);
-    expect(cleanTldr('A'.repeat(250) + '. ' + 'b '.repeat(200))).toBe('A'.repeat(250) + '.');
+    expect(cleanTldr('word '.repeat(200)).length).toBeLessThanOrEqual(250);
+    expect(cleanTldr('A'.repeat(150) + '. ' + 'b '.repeat(200))).toBe('A'.repeat(150) + '.');
     const w = cleanTldr('word '.repeat(100));
     expect(w.endsWith('…')).toBe(true);
     expect(w.slice(0, -1).split(' ').every((t) => t === 'word')).toBe(true);
     const hard = cleanTldr('x'.repeat(1000));
-    expect(hard).toHaveLength(450);
+    expect(hard).toHaveLength(250);
     expect(hard.endsWith('…')).toBe(true);
     expect(cleanTldr(GOOD)).toBe(GOOD);
     expect(cleanTldr('a'.repeat(50) + ' ' + 'b'.repeat(50), 40).length).toBeLessThanOrEqual(40);
@@ -129,7 +130,7 @@ describe('prompts + quality', () => {
     for (const p of [SUMMARY_SYSTEM_PROMPT, COMBINED_SYSTEM_PROMPT]) {
       const low = p.toLowerCase();
       expect(low).toContain('name the concrete subject');
-      expect(low).toContain('45 to 70 words');
+      expect(low).toContain('25 to 40 words');
       expect(low).toContain('never invent facts');
       expect(low).toContain('good examples');
     }
@@ -143,6 +144,10 @@ describe('prompts + quality', () => {
     expect(qualityIssues('Acme ships a chip.', 100)).toEqual([]);
     expect(qualityIssues(GOOD + ' The post explores various ideas.').some((i) => i.startsWith('filler'))).toBe(true);
     expect(qualityIssues(GOOD + ' Why?')).toContain('question');
+    expect(qualityIssues('Acme ships a chip that runs models at forty tokens a second.', 1000)).toEqual([]); // 12+ words ok
+    expect(qualityIssues('word '.repeat(46).trim())).toContain('too long');
+    expect(nudgeFor(['too long'])).toBe(SHORTER_NUDGE);
+    expect(nudgeFor(['too short'])).toBe(STRICT_NUDGE);
   });
 });
 
@@ -186,6 +191,15 @@ describe('summarize', () => {
     expect(r).toEqual({ article_id: 1, tldr: GOOD, model: 'p' });
     expect(c.calls).toHaveLength(1);
     expect(c.calls[0].user).toContain('Headline: Acme launches Zephyr 2');
+  });
+
+  it('retries once with the shorter nudge when the answer is over 45 words', async () => {
+    const wordy = 'Acme launched the Zephyr chip ' + 'and it runs fast '.repeat(14).trim() + '.';
+    const c = fakeClient([wordy, GOOD]);
+    const r = await summarize(art(), { client: c, model: 'p' });
+    expect(c.calls).toHaveLength(2);
+    expect(c.calls[1].user.endsWith(SHORTER_NUDGE)).toBe(true);
+    expect(r.tldr).toBe(GOOD);
   });
 
   it('retries once with a stricter nudge and keeps the better answer', async () => {

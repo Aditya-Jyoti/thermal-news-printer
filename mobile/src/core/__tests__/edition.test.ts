@@ -92,7 +92,7 @@ describe('parseCurateJson', () => {
 });
 
 describe('prompt lines', () => {
-  it('are compact: id | #category | title | ~220 chars of whitespace-collapsed text', () => {
+  it('are compact: id | #category | title | ~160 chars of whitespace-collapsed text', () => {
     const lines = candidateLines([
       { id: 7, category_slug: 'products', title: 'A | B\ntitle', content_text: `${'word  \n '.repeat(100)}` },
     ]);
@@ -128,6 +128,7 @@ describe('curateEdition', () => {
     const old = await seed({ ageDays: 30 });
     const printed = await seed();
     await createPrint(db, 'manual', [{ article_id: printed, position: 1, category_slug: 'products', tldr: 't' }]);
+    await updateSettings(db, { max_items_total: 2 });
     const client = ai(() => picks([b, a], [pol]));
     const r = await curateEdition(db, { client });
     expect(r).toMatchObject({ usedAi: true, noKey: false });
@@ -141,13 +142,16 @@ describe('curateEdition', () => {
     expect(Object.fromEntries(flags.map((f) => [f.id, f.is_political]))).toEqual({ [a]: 0, [b]: 0, [pol]: 1, [old]: null, [printed]: null });
   });
 
-  it('applies limits and the cap on the AI order', async () => {
+  it('prefers limits on the AI order, then tops up past them to the guaranteed size', async () => {
     const ids = [await seed(), await seed(), await seed(), await seed()];
     await updateSettings(db, { max_items_total: 8 });
     const cat = (await db.get<{ id: number }>("SELECT id FROM categories WHERE slug='products'"))!.id;
     await updateCategory(db, cat, { print_limit: 2 });
     const r = await curateEdition(db, { client: ai(() => picks([ids[3], ids[1], ids[0], ids[2]])) });
-    expect(r.items.map((i) => i.article_id)).toEqual([ids[3], ids[1]]);
+    expect(r.items.map((i) => i.article_id)).toEqual([ids[3], ids[1], ids[0], ids[2]]);
+    await updateSettings(db, { max_items_total: 3 });
+    const r3 = await curateEdition(db, { client: ai(() => picks([ids[3], ids[1], ids[0], ids[2]])) });
+    expect(r3.items.map((i) => i.article_id)).toEqual([ids[3], ids[1], ids[0]]);
   });
 
   it('falls back to the deterministic newest-first selection on AI errors or unparsable replies', async () => {
@@ -175,6 +179,7 @@ describe('curateEdition', () => {
 describe('edition persistence and rebuild rules', () => {
   it('persists the edition, summarizes only the chosen stories and exposes joined data', async () => {
     const ids = [await seed(), await seed(), await seed()];
+    await updateSettings(db, { max_items_total: 2 });
     const client = ai(() => picks([ids[2], ids[0]]));
     const ed = await buildEdition(db, { client });
     expect(client.summaryCalls).toBe(2); // not 3: unchosen stories are never summarized

@@ -11,8 +11,7 @@ from tnp.ai.summarize import (
 from .test_ai import FakeClient, art
 
 GOOD = ("Acme Corp launched the Zephyr 2 chip, which runs language models on-device at 40 tokens per second "
-        "while drawing 3 watts. It ships to phone makers in March and doubles the speed of the earlier Zephyr "
-        "design, which could bring offline assistants to mid-range handsets.")
+        "while drawing 3 watts. It ships to phone makers in March.")
 LONG_BODY = "Acme details. " * 100
 
 
@@ -51,9 +50,9 @@ def test_prepare_body_budget_and_paragraph_cut():
 
 
 def test_clean_tldr_new_cap():
-    assert MAX_TLDR_CHARS == 450
+    assert MAX_TLDR_CHARS == 250
     out = clean_tldr("Sentence number one is here. " * 40)
-    assert len(out) <= 450 and out.endswith(".")
+    assert len(out) <= 250 and out.endswith(".")
     assert clean_tldr(GOOD) == GOOD
 
 
@@ -61,8 +60,8 @@ def test_prompts_carry_the_descriptiveness_rules():
     for p in (SUMMARY_SYSTEM_PROMPT, COMBINED_SYSTEM_PROMPT):
         low = p.lower()
         assert "name the concrete subject" in low
-        assert "numbers, names" in low and "why it matters" in low
-        assert "45 to 70 words" in low and "450 characters" in low
+        assert "number, name" in low and "why it matters" in low
+        assert "25 to 40 words" in low and "250 characters" in low
         assert "never invent facts" in low
         assert "argument or finding" in low
         for phrase in BANNED_PHRASES:
@@ -84,7 +83,7 @@ def test_summarize_retries_once_on_vague_output():
     r = summarize(art(text=LONG_BODY), client=c, model="m")
     assert r.tldr == GOOD and len(c.calls) == 2
     assert "previous answer was too vague" in c.calls[1]["messages"][0]["content"]
-    assert c.calls[1]["max_tokens"] == 220
+    assert c.calls[1]["max_tokens"] == 120
 
 
 def test_summarize_good_output_no_retry():
@@ -111,3 +110,11 @@ def test_combined_retries_on_vague_output():
     c = FakeClient([bad, good])
     s, v = summarize_and_classify(art(text=LONG_BODY), client=c, model="m")
     assert s.tldr == GOOD and not v.is_political and len(c.calls) == 2
+
+
+def test_quality_flags_too_long_and_uses_shorter_nudge():
+    from tnp.ai.summarize import SHORTER_NUDGE, nudge_for, quality_issues
+
+    assert "too long" in quality_issues("word " * 46)
+    assert nudge_for(["too long"]) == SHORTER_NUDGE
+    assert quality_issues("Acme ships a chip that runs models at forty tokens a second.", input_chars=1000) == []

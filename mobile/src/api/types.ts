@@ -201,6 +201,10 @@ export interface FetchNewsResult {
 export interface Diagnostics {
   /** Configuration hints, e.g. a useless fallback model. */
   hints?: string[];
+  /** recency window the last edition needed (days); null = unlimited. */
+  window_days?: number | null;
+  /** per category: stored articles, unseen ones inside the window, stories in the current edition. */
+  categories?: { slug: string; fetched: number; eligible: number; in_edition: number }[];
   last_errors: LastErrors;
   counts: {
     articles: number;

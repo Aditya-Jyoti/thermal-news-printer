@@ -175,9 +175,9 @@ describe('history grouping by local day', () => {
 });
 
 describe('edition window and shortfall', () => {
-  it('uses a 14 day window and 80 candidates', async () => {
+  it('uses a 14 day first window and 100 candidates per AI call', async () => {
     expect(MAX_AGE_DAYS).toBe(14);
-    expect(MAX_CANDIDATES).toBe(80);
+    expect(MAX_CANDIDATES).toBe(100);
     const recent = await seed({ ageDays: 12 });
     await seed({ ageDays: 16 });
     expect((await listCurationCandidates(db, { limit: MAX_CANDIDATES, maxAgeDays: MAX_AGE_DAYS })).map((c) => c.id)).toEqual([recent]);

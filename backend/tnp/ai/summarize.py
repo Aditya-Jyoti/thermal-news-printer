@@ -14,10 +14,11 @@ from .politics import POLITICS_RULES, parse_verdict_json
 
 log = logging.getLogger(__name__)
 
-MAX_TLDR_CHARS = 450
-SUMMARY_MAX_TOKENS = 220
-COMBINED_MAX_TOKENS = 340
-MIN_WORDS = 25
+MAX_TLDR_CHARS = 250
+SUMMARY_MAX_TOKENS = 120
+COMBINED_MAX_TOKENS = 240
+MIN_WORDS = 12
+MAX_WORDS = 45
 SHORT_INPUT_CHARS = 400  # teaser-only input: do not demand a minimum length (never pad)
 
 BANNED_PHRASES = (
@@ -31,23 +32,33 @@ _BANNED_RE = re.compile(
 )
 
 TLDR_RULES = """The headline is NOT printed, so the TL;DR must stand alone and name the concrete subject (company, product, person, institution or study) explicitly.
-Write 2 to 3 sentences, about 45 to 70 words, never more than 450 characters, in this order:
-1. What happened: who did what, what was found, or what launched.
-2. The key specifics from the text: numbers, names, how it works, scope, dates.
-3. One short clause on why it matters or what changes, only if the text supports it.
+Write 1 to 2 sentences, about 25 to 40 words, hard cap 250 characters:
+1. Lead with the concrete subject and what happened: who did what, what was found, or what launched.
+2. Then the single most important specific: one number, name or how it works.
+3. No background. No "why it matters" clause unless it fits in the word budget.
 Rules:
 - Never invent facts. If the text is only a short teaser, state just what it says, concretely, without padding.
 - For podcasts, essays and opinion pieces, state the actual argument or finding, not that someone talks about a topic.
 - Banned filler: explores, discusses, delves, sheds light, various, a number of, highlights the importance, in today's world, rhetorical questions, and "This article/post/episode".
 - Neutral newspaper tone, active voice. Plain text only: no markdown, emoji, quotation marks, hashtags or bullet points. Do not mention that you are summarizing.
 Good examples:
-Linear, the issue-tracking startup, launched Linear Asks, which turns Slack messages into tracked issues without leaving the chat. Teams can route requests to the right owner automatically, and the feature is included in all paid plans. It aims to cut the copy-pasting between support channels and engineering backlogs.
-A Stanford study of 2,100 adults found that people who walked 7,000 steps a day had a 47 percent lower risk of early death than those who walked 2,000. Benefits flattened beyond about 10,000 steps, suggesting the popular target is higher than needed."""
+Linear, the issue-tracking startup, launched Linear Asks, which turns Slack messages into tracked issues and routes them to the right owner. It is included in all paid plans.
+A Stanford study of 2,100 adults found that walking 7,000 steps a day cut early-death risk by 47 percent versus 2,000 steps, with little extra benefit beyond 10,000."""
 
 STRICT_NUDGE = (
-    "\n\nYour previous answer was too vague or too short. Rewrite it: 2 to 3 concrete sentences (45 to 70 words), "
-    "name the exact subject, include specific numbers or names from the text, and avoid every banned filler word."
+    "\n\nYour previous answer was too vague or too short. Rewrite it: 1 to 2 concrete sentences (25 to 40 words), "
+    "name the exact subject, include one specific number or name from the text, and avoid every banned filler word."
 )
+
+SHORTER_NUDGE = (
+    "\n\nYour previous answer was too long. Rewrite it shorter: 1 to 2 sentences, 25 to 40 words, under 250 characters. "
+    "Subject and what happened first, then the single most important specific. Drop all background."
+)
+
+
+def nudge_for(issues: list[str]) -> str:
+    return SHORTER_NUDGE if issues == ["too long"] else STRICT_NUDGE
+
 
 SUMMARY_SYSTEM_PROMPT = f"""You write the digest paragraph for a tiny newspaper printed on a narrow receipt strip.
 
@@ -85,6 +96,8 @@ def quality_issues(tldr: str, *, input_chars: int = 10**6) -> list[str]:
     issues: list[str] = []
     if len(tldr.split()) < MIN_WORDS and input_chars >= SHORT_INPUT_CHARS:
         issues.append("too short")
+    if len(tldr.split()) > MAX_WORDS:
+        issues.append("too long")
     found = sorted({m.group(0).lower() for m in _BANNED_RE.finditer(tldr)})
     if found:
         issues.append("filler: " + ", ".join(found))
@@ -141,9 +154,10 @@ def summarize(
         tldr = clean_tldr(chat(client, model=m, system=SUMMARY_SYSTEM_PROMPT, user=user, max_tokens=SUMMARY_MAX_TOKENS))
         if not tldr:
             raise AIError("model returned no usable TL;DR")
-        if quality_issues(tldr, input_chars=in_chars):
+        issues = quality_issues(tldr, input_chars=in_chars)
+        if issues:
             try:  # one stricter retry on the same model
-                retry = clean_tldr(chat(client, model=m, system=SUMMARY_SYSTEM_PROMPT, user=user + STRICT_NUDGE,
+                retry = clean_tldr(chat(client, model=m, system=SUMMARY_SYSTEM_PROMPT, user=user + nudge_for(issues),
                                         max_tokens=SUMMARY_MAX_TOKENS))
                 if retry and _score(retry, in_chars) < _score(tldr, in_chars):
                     tldr = retry
@@ -205,9 +219,10 @@ def summarize_and_classify(
         tldr, raw = once(m, user)
         if not tldr:
             raise AIError("combined response had no usable tldr")
-        if quality_issues(tldr, input_chars=in_chars):
+        issues = quality_issues(tldr, input_chars=in_chars)
+        if issues:
             try:  # one stricter retry on the same model
-                tldr2, raw2 = once(m, user + STRICT_NUDGE)
+                tldr2, raw2 = once(m, user + nudge_for(issues))
                 if tldr2 and _score(tldr2, in_chars) < _score(tldr, in_chars):
                     tldr, raw = tldr2, raw2
             except AIError:

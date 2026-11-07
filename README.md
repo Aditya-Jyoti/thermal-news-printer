@@ -36,8 +36,13 @@ Everything runs **on your Android phone**. You don't need a server.
 - **One AI call** looks at the recent, never-printed candidates (title plus a short snippet) and ranks the most
   interesting, substantive stories: launches, research findings, engineering deep dives, big non-political news.
   It skips listicles, promos and near-duplicates. The same call flags political stories.
-- The code then applies the hard rules to the AI's ranking:
-  - The **per-category limits** you set (e.g. max 3 `#products`, max 1 `#psychology`), plus an overall cap.
+- The code then applies the rules to the AI's ranking:
+  - **The edition always has exactly "max items" stories** (Settings) whenever enough unseen, non-political
+    stories exist. The **per-category limits** you set (e.g. max 3 `#products`, max 1 `#psychology`) are
+    *preferences*: the AI's picks are taken within them first, then remaining picks, then the newest other
+    stories round-robin across categories to fill the count. A limit of 0 (and disabled feeds) always excludes.
+  - If the last 14 days cannot fill the edition, the window widens (30, 90 days, then no limit). Only when every
+    unseen story is exhausted is the edition smaller, and the Feed says exactly why.
   - **It never prints the same news twice.** Anything that appeared in a successful (or in-progress) print is
     excluded. Headlines that are near-duplicates (word overlap ≥ 80%) of the last print, or of each other, are
     skipped too. If a print *fails*, those stories become eligible again, because they never reached paper.
@@ -56,9 +61,10 @@ Everything runs **on your Android phone**. You don't need a server.
   so the AI has the real story to work with.
 - **Strictly non-political.** A keyword pre-filter catches obvious cases cheaply and the curation call decides the
   rest. Political stories are never printed or shown.
-- The prompt asks for 2–3 sentences of about 45–70 words that **name the concrete subject** (the headline
-  isn't printed), give the key specifics (numbers, names, how it works) and say why it matters. Filler like
-  "explores", "discusses" and "sheds light" is banned, and a weak answer is retried once.
+- The prompt asks for 1–2 sentences of about 25–40 words (hard cap 250 characters) that **name the concrete
+  subject** (the headline isn't printed), say what happened and give the single most important specific
+  (a number, name or how it works), with no background. Filler like
+  "explores", "discusses" and "sheds light" is banned, and a weak or over-long answer is retried once.
 
 ### 4. Rendering the receipt
 - A canvas exactly **384 px wide** (48 mm at 203 dpi), as long as the content needs, **1-bit black and white**.

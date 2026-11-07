@@ -102,7 +102,7 @@ export default function FeedScreen() {
           </Text>
           {short ? (
             <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-              {items.length} of {target} — not enough fresh stories within your category limits.
+              Only {items.length} unseen {items.length === 1 ? 'story' : 'stories'} left across your feeds — add feeds or wait for new posts
             </Text>
           ) : null}
         </View>
