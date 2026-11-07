@@ -1,4 +1,4 @@
-import { ApiError } from './errors';
+import { ApiError, isNotImplemented } from './errors';
 import type { Api, ArticleQuery } from './types';
 
 type Query = Record<string, string | number | boolean | null | undefined>;
@@ -80,11 +80,15 @@ export function createHttpApi(rawBase: string): Api {
     getModels: () => req('GET', '/models'),
     processAi: () => req('POST', '/ai/process'),
     digestPreview: () => req('GET', '/digest/preview'),
-    previewUrl: (nonce) => `${base}/print/preview.png?t=${nonce}`,
-    async checkPreview(): Promise<true> {
-      // react-query rejects undefined results, so resolve a concrete value
-      await raw('GET', '/print/preview.png', { query: { probe: Date.now() } });
-      return true;
+    async previewImage() {
+      // Probe first so a 501 (renderer not available on the backend) falls back to the mock receipt.
+      try {
+        await raw('GET', '/print/preview.png', { query: { probe: Date.now() } });
+      } catch (e) {
+        if (isNotImplemented(e)) return null;
+        throw e;
+      }
+      return { uri: `${base}/print/preview.png?t=${Date.now()}` };
     },
     printNow: () => req('POST', '/print'),
   };

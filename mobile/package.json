@@ -42,9 +42,11 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/react": "~19.3.0",
+    "@types/sql.js": "^1.4.11",
     "eslint": "^9.39.5",
     "jest": "^30.5.2",
     "jest-expo": "^58.0.14",
+    "sql.js": "^1.15.2",
     "typescript": "~6.0.3"
   },
   "scripts": {
@@ -72,6 +74,11 @@
       "/node_modules/",
       "/android/",
       "/ios/"
+    ],
+    "transformIgnorePatterns": [
+      "/node_modules/(?!(.pnpm|react-native|@react-native|@react-native-community|expo|@expo|@expo-google-fonts|react-navigation|@react-navigation|@sentry/react-native|native-base|standard-navigation|css-select|css-what|nth-check|boolbase|uhyphen|html-escaper|domhandler|domutils|dom-serializer|entities|htmlparser2|domelementtype|linkedom|cssom|cssomnom))",
+      "/node_modules/react-native-reanimated/plugin/",
+      "/node_modules/@react-native/babel-preset/"
     ]
   }
 }

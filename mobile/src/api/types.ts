@@ -167,9 +167,11 @@ export interface Api {
   getModels(): Promise<ModelOption[]>;
   processAi(): Promise<AiProcessResult>;
   digestPreview(): Promise<DigestItem[]>;
-  /** Preview PNG URL (cache-busted). Null in demo mode (in-app mock receipt is rendered instead). */
-  previewUrl(nonce: number): string | null;
-  /** Probe the renderer: throws ApiError(501) when unavailable. */
-  checkPreview(): Promise<true>; // resolves true when the backend renderer is available
+  /**
+   * The current digest rendered as the 384px receipt image, as a displayable URI (data: URI on device,
+   * cache-busted http URL in remote mode). Null when no renderer is available (demo mode, renderer
+   * missing): the Preview screen then shows the in-app ReceiptMock approximation.
+   */
+  previewImage(): Promise<{ uri: string } | null>;
   printNow(): Promise<PrintRecord>;
 }

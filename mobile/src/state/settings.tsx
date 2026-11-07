@@ -4,33 +4,46 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 export const DEFAULT_BASE_URL = 'http://localhost:8000';
 const KEY = 'tnp.appSettings.v1';
 
+/** device = everything on the phone (default); remote = a TNP backend over HTTP; demo = in-memory mock data. */
+export type DataMode = 'device' | 'remote' | 'demo';
+const MODES: DataMode[] = ['device', 'remote', 'demo'];
+
 interface Stored {
   baseUrl: string;
-  demo: boolean;
+  mode: DataMode;
 }
 
 interface Ctx extends Stored {
   setBaseUrl: (url: string) => void;
-  setDemo: (demo: boolean) => void;
+  setMode: (mode: DataMode) => void;
 }
 
 const SettingsContext = createContext<Ctx | null>(null);
 
-/** Local (on-device) app settings: backend URL and the demo-data toggle. */
+/** Migrate the persisted blob: the legacy `demo: true` flag becomes mode 'demo'. */
+export function parseStored(raw: string | null, fallback: Stored): Stored {
+  if (!raw) return fallback;
+  try {
+    const p = JSON.parse(raw) as Partial<Stored> & { demo?: unknown };
+    const mode: DataMode = MODES.includes(p.mode as DataMode)
+      ? (p.mode as DataMode)
+      : p.demo === true
+        ? 'demo'
+        : fallback.mode;
+    return { baseUrl: typeof p.baseUrl === 'string' && p.baseUrl ? p.baseUrl : fallback.baseUrl, mode };
+  } catch {
+    return fallback;
+  }
+}
+
+/** Local (on-device) app settings: data source mode and backend URL. */
 export function AppSettingsProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<Stored>({ baseUrl: DEFAULT_BASE_URL, demo: false });
+  const [state, setState] = useState<Stored>({ baseUrl: DEFAULT_BASE_URL, mode: 'device' });
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     AsyncStorage.getItem(KEY)
-      .then((raw) => {
-        if (!raw) return;
-        const p = JSON.parse(raw) as Partial<Stored>;
-        setState((s) => ({
-          baseUrl: typeof p.baseUrl === 'string' && p.baseUrl ? p.baseUrl : s.baseUrl,
-          demo: typeof p.demo === 'boolean' ? p.demo : s.demo,
-        }));
-      })
+      .then((raw) => setState((s) => parseStored(raw, s)))
       .catch(() => undefined)
       .finally(() => setReady(true));
   }, []);
@@ -44,7 +57,7 @@ export function AppSettingsProvider({ children }: { children: React.ReactNode })
     () => ({
       ...state,
       setBaseUrl: (baseUrl) => persist({ ...state, baseUrl: baseUrl.trim() || DEFAULT_BASE_URL }),
-      setDemo: (demo) => persist({ ...state, demo }),
+      setMode: (mode) => persist({ ...state, mode }),
     }),
     [state, persist],
   );

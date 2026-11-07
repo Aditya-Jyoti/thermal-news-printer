@@ -8,9 +8,11 @@ import { ConnectionSettings } from '@/components/ConnectionSettings';
 import { PrintingSettings } from '@/components/PrintingSettings';
 import { ScheduleList } from '@/components/ScheduleList';
 import { errorMessage } from '@/lib/format';
+import { useAppSettings } from '@/state/settings';
 
 export default function SettingsScreen() {
   const printNow = usePrintNow();
+  const { mode } = useAppSettings();
   const [toast, setToast] = useState<string | null>(null);
 
   const onPrint = () =>
@@ -39,7 +41,13 @@ export default function SettingsScreen() {
         <PrintingSettings onError={onError} onSaved={() => setToast('Saved')} />
         <Divider style={styles.div} />
 
-        <List.Subheader>Connection</List.Subheader>
+        {mode === 'device' && (
+          <>
+            {/* PrinterSettings mounted here by Orchestrator */}
+          </>
+        )}
+
+        <List.Subheader>Data source</List.Subheader>
         <ConnectionSettings onMessage={setToast} />
       </ScrollView>
       <Snackbar visible={toast !== null} onDismiss={() => setToast(null)} duration={4000}>
