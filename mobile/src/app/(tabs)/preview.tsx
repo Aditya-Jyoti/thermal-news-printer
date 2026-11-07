@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Button, Text } from 'react-native-paper';
 
-import { isNotImplemented } from '@/api/errors';
 import { useDigestPreview } from '@/api/hooks';
 import { useApi } from '@/api/provider';
 import { EmptyView, ErrorView, LoadingView } from '@/components/common';
@@ -17,7 +16,7 @@ const GUTTER = 32;
 
 export default function PreviewScreen() {
   const api = useApi();
-  const { demo } = useAppSettings();
+  const { mode } = useAppSettings();
   const { width } = useWindowDimensions();
   const [nonce, setNonce] = useState(() => Date.now());
   const [ratio, setRatio] = useState<number | null>(null);
@@ -26,12 +25,12 @@ export default function PreviewScreen() {
   const paperWidth = Math.min(PAPER_WIDTH, width - GUTTER);
   const scale = paperWidth / PAPER_WIDTH;
 
-  // Probe the renderer first so a 501 gives a friendly message rather than a broken image.
-  const probe = useQuery({
-    queryKey: ['preview-probe', nonce],
-    queryFn: () => api.checkPreview(),
-    enabled: !demo,
+  // The real renderer output when available; null means "no renderer": show the in-app mock instead.
+  const image = useQuery({
+    queryKey: ['preview-image', nonce, mode],
+    queryFn: () => api.previewImage(),
     retry: false,
+    gcTime: 0,
   });
   const digest = useDigestPreview();
 
@@ -42,46 +41,37 @@ export default function PreviewScreen() {
     void digest.refetch();
   };
 
-  let body: React.ReactNode;
-  if (demo) {
-    if (digest.isLoading) body = <LoadingView />;
-    else if (digest.isError) body = <ErrorView error={digest.error} onRetry={refresh} />;
-    else if ((digest.data ?? []).length === 0) body = <EmptyView title="Nothing new to print" hint="Refresh feeds from the Feed tab." />;
-    else
-      body = (
-        <PaperFrame>
-          <ReceiptMock items={digest.data ?? []} scale={scale} />
-        </PaperFrame>
-      );
-  } else if (probe.isLoading) {
-    body = <LoadingView />;
-  } else if (probe.isError) {
-    if (!isNotImplemented(probe.error)) body = <ErrorView error={probe.error} onRetry={refresh} />;
-    else if (digest.isLoading) body = <LoadingView />;
-    else if (digest.isError) body = <ErrorView error={digest.error} onRetry={refresh} />;
-    else
-      body = (
-        <View>
+  const mock = (notice: boolean) => {
+    if (digest.isLoading) return <LoadingView />;
+    if (digest.isError) return <ErrorView error={digest.error} onRetry={refresh} />;
+    return (
+      <View>
+        {notice && (
           <Text variant="bodySmall" style={styles.notice}>
             Renderer not available yet — showing approximation
           </Text>
-          {(digest.data ?? []).length === 0 ? (
-            <EmptyView title="Nothing new to print" hint="Refresh feeds from the Feed tab." />
-          ) : (
-            <PaperFrame>
-              <ReceiptMock items={digest.data ?? []} scale={scale} />
-            </PaperFrame>
-          )}
-        </View>
-      );
-  } else if (imgError) {
-    body = <ErrorView error={imgError} onRetry={refresh} />;
-  } else {
-    const uri = api.previewUrl(nonce);
+        )}
+        {(digest.data ?? []).length === 0 ? (
+          <EmptyView title="Nothing new to print" hint="Refresh feeds from the Feed tab." />
+        ) : (
+          <PaperFrame>
+            <ReceiptMock items={digest.data ?? []} scale={scale} />
+          </PaperFrame>
+        )}
+      </View>
+    );
+  };
+
+  let body: React.ReactNode;
+  if (image.isLoading) body = <LoadingView />;
+  else if (image.isError) body = <ErrorView error={image.error} onRetry={refresh} />;
+  else if (!image.data) body = mock(mode !== 'demo');
+  else if (imgError) body = <ErrorView error={imgError} onRetry={refresh} />;
+  else
     body = (
       <PaperFrame>
         <Image
-          source={{ uri: uri ?? undefined }}
+          source={{ uri: image.data.uri }}
           cachePolicy="none"
           contentFit="fill"
           style={{ width: paperWidth, aspectRatio: ratio ?? 384 / 600 }}
@@ -90,7 +80,6 @@ export default function PreviewScreen() {
         />
       </PaperFrame>
     );
-  }
 
   return (
     <View style={styles.flex}>

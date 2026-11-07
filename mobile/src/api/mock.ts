@@ -297,8 +297,7 @@ export function createMockApi(): Api {
       ]),
     processAi: () => delay({ summarized: articles.filter((a) => a.tldr === null).length, flagged_political: 0, failed: 0, skipped_no_key: false }, 800),
     digestPreview: () => delay(nextBatch()),
-    previewUrl: () => null,
-    checkPreview: () => delay(true as const, 100),
+    previewImage: () => delay(null, 100),
     printNow: async () => {
       const items = nextBatch().map((d) => {
         const a = articles.find((x) => x.id === d.article_id);

@@ -288,7 +288,7 @@ describe('createAiClient (HTTP)', () => {
       if (r instanceof Error) throw r;
       return r;
     });
-    const sleep = jest.fn(async () => undefined);
+    const sleep = jest.fn(async (_ms: number) => undefined);
     const client = createAiClient({ apiKey: 'k', fetch: f, sleep });
     expect(await client.chat({ model: 'm', system: 's', user: 'u' })).toBe('fine');
     expect(f).toHaveBeenCalledTimes(4);
