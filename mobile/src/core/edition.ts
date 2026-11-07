@@ -161,7 +161,10 @@ export async function curateEdition(db: Db, deps: EditionDeps = {}): Promise<Cur
 async function summarizeMissing(db: Db, deps: EditionDeps): Promise<void> {
   const state = stateOf(db);
   const missing = (await listEditionItems(db)).filter((i) => i.tldr === null);
-  if (missing.length === 0) return;
+  if (missing.length === 0) {
+    await clearError(db, 'summarize');
+    return;
+  }
   const client = await resolveClient(deps);
   if (!client) {
     state.status.no_key = true;
