@@ -47,11 +47,6 @@ export function ReceiptMock({ items, scale = 1 }: { items: DigestItem[]; scale?:
       <Rule s={s} />
       <Text style={[styles.date, { fontSize: 12 * s, marginVertical: 3 * s }]}>{date}</Text>
       <Rule s={s} />
-      <View style={[styles.edition, { paddingHorizontal: pad, marginVertical: 2 * s }]}>
-        <Text style={[styles.small, { fontSize: 10 * s }]}>MORNING EDITION</Text>
-        <Text style={[styles.small, { fontSize: 10 * s }]}>NO. {items.length}</Text>
-      </View>
-      <Rule s={s} />
       {items.map((it, i) => (
         <View key={it.article_id} style={{ paddingHorizontal: pad }}>
           <Text style={[styles.tag, { fontSize: 13 * s, marginTop: 4 * s }]}>#{it.category_slug}</Text>

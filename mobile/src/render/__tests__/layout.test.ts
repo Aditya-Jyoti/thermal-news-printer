@@ -1,6 +1,6 @@
 import { describe, it, expect } from '@jest/globals';
 import type { DigestItem } from '../../api/types';
-import { LEADING, PAD, TEXT_W, WIDTH, layoutReceipt, wrapText, formatDate, type TextMetrics, type FontSpec } from '../layout';
+import { LEADING, PAD, PAD_R, TEXT_W, WIDTH, layoutReceipt, wrapText, formatDate, type TextMetrics, type FontSpec } from '../layout';
 
 // 1px per char per 2px of font size => deterministic fake metrics.
 const fake: TextMetrics = {
@@ -40,9 +40,9 @@ describe('layoutReceipt', () => {
     expect(one.width).toBe(384);
     expect(two.height).toBeGreaterThan(one.height);
   });
-  it('matches python height formula: 124 + sum(24+n*26+6) + 14*(k-1) + 144', () => {
+  it('height formula (no edition row): 100 + sum(24+n*26+6) + 14*(k-1) + 144', () => {
     const l = layoutReceipt([item(0, 'hi')], { editionDate: date }, fake);
-    expect(l.height).toBe(124 + (24 + 1 * LEADING + 6) + 144);
+    expect(l.height).toBe(100 + (24 + 1 * LEADING + 6) + 144);
   });
   it('empty digest has the no-stories text and no tags', () => {
     const l = layoutReceipt([], { editionDate: date }, fake);
@@ -50,7 +50,7 @@ describe('layoutReceipt', () => {
     expect(texts.some((t) => t.startsWith('No new stories'))).toBe(true);
     expect(texts.some((t) => t.startsWith('#'))).toBe(false);
     expect(texts).toContain('0 stories');
-    expect(l.height).toBe(124 + 60 + 144);
+    expect(l.height).toBe(100 + 60 + 144);
   });
   it('prints plain #tag, no titles, orders by position', () => {
     const l = layoutReceipt([item(1, 'second', 'learning'), item(0, 'first', 'products')], { editionDate: date }, fake);
@@ -58,13 +58,13 @@ describe('layoutReceipt', () => {
     expect(texts.indexOf('#products')).toBeLessThan(texts.indexOf('#learning'));
     expect(texts).toContain('2 stories');
   });
-  it('header copy: date, edition row, issue number', () => {
+  it('header copy: masthead and date only (no edition name / issue number row)', () => {
     const l = layoutReceipt([item(0, 'x')], { editionDate: date, editionName: 'Evening Edition', issueNo: 42 }, fake);
     const texts = l.ops.filter((o) => o.t === 'text').map((o) => (o as any).text as string);
     expect(texts).toContain('THE THERMAL TIMES');
     expect(texts).toContain('Saturday, November 7, 2026');
-    expect(texts).toContain('EVENING EDITION');
-    expect(texts).toContain('NO. 42');
+    expect(texts).not.toContain('EVENING EDITION');
+    expect(texts.some((t) => t.startsWith('NO.'))).toBe(false);
     expect(texts).toContain('1 story');
   });
   it('body lines never exceed the text column under the fake metrics', () => {
@@ -75,13 +75,13 @@ describe('layoutReceipt', () => {
         expect(o.x).toBe(PAD);
         expect(fake.measure(o.text, o.font)).toBeLessThanOrEqual(TEXT_W);
       }
-      if (o.t === 'rect') expect(o.x1).toBeLessThan(WIDTH);
+      if (o.t === 'rect') expect(o.x1).toBeLessThanOrEqual(WIDTH - PAD_R);
     }
   });
   it('masthead auto-fits to the column', () => {
     const l = layoutReceipt([], { editionDate: date }, fake);
     const mast = l.ops.find((o) => o.t === 'text' && o.font.face === 'mast') as any;
-    expect(fake.measure(mast.text, mast.font)).toBeLessThanOrEqual(WIDTH - 2 * PAD);
+    expect(fake.measure(mast.text, mast.font)).toBeLessThanOrEqual(WIDTH - PAD - PAD_R);
     expect(mast.font.size).toBeLessThanOrEqual(44);
   });
   it('formats dates', () => {

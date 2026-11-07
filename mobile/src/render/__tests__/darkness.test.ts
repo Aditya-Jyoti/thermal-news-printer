@@ -2,7 +2,7 @@
 import { installNodeFonts } from '../testing';
 import { describe, it, expect, beforeAll } from '@jest/globals';
 import { renderReceiptAt, sampleItems } from '../index';
-import { PAD, WIDTH } from '../layout';
+import { PAD, PAD_R, WIDTH } from '../layout';
 
 const opts = { editionDate: new Date(2026, 10, 7) };
 const black = (p: Uint8Array) => p.reduce((a, v) => a + v, 0);
@@ -57,7 +57,7 @@ describe('render ink weight per darkness level', () => {
       const { pixels, height } = r.bitmap;
       let beyond = 0;
       for (let y = 130; y < height - 160; y++) {
-        for (let x = WIDTH - PAD + 1; x < WIDTH; x++) beyond += pixels[y * WIDTH + x];
+        for (let x = WIDTH - PAD_R + 1; x < WIDTH; x++) beyond += pixels[y * WIDTH + x];
         for (let x = 0; x < PAD - 2; x++) beyond += pixels[y * WIDTH + x];
       }
       expect(beyond).toBe(0);

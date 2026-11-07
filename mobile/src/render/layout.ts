@@ -6,9 +6,14 @@
 import type { DigestItem } from '../api/types';
 
 export const WIDTH = 384;
-export const PAD = 6;
+export const PAD = 6; // left margin
+/** Right margin: the SC03h clips the right edge of a 384-dot row, so keep content well inside. */
+export const PAD_R = 22;
 export const TEXT_X = PAD;
-export const TEXT_R = WIDTH - PAD;
+export const TEXT_R = WIDTH - PAD_R;
+/** Horizontal extent of the printable area; centred content is centred here, not on the raw canvas. */
+const CX0 = PAD;
+const CX1 = WIDTH - PAD_R;
 export const TEXT_W = TEXT_R - TEXT_X;
 export const TRAIL = 44;
 export const BODY_SIZE = 21;
@@ -121,44 +126,38 @@ function ornament(ops: DrawOp[], y: number, x0: number, x1: number) {
 export function layoutReceipt(items: DigestItem[], opts: LayoutOptions, m: TextMetrics): RenderLayout {
   const ordered = [...items].sort((a, b) => a.position - b.position);
   const ops: DrawOp[] = [];
-  const mast = fitMasthead(PAPER_NAME, WIDTH - 2 * PAD, m);
+  const mast = fitMasthead(PAPER_NAME, TEXT_R - TEXT_X, m);
   const wrapped = ordered.map((i) => wrapText(i.tldr, BODY, TEXT_W, (t, f) => m.measure(t, f)));
   const itemH = wrapped.map((ls) => 24 + ls.length * LEADING + 6);
-  const headerH = 124;
+  const headerH = 100;
   const contentH = ordered.length ? itemH.reduce((a, b) => a + b, 0) + 14 * (ordered.length - 1) : 60;
   const footerH = 100 + TRAIL;
   let height = headerH + contentH + footerH;
 
-  const centered = (y: number, text: string, font: FontSpec, x0 = 0, x1 = WIDTH) => {
+  const centered = (y: number, text: string, font: FontSpec, x0 = CX0, x1 = CX1) => {
     const w = m.measure(text, font);
     ops.push({ t: 'text', x: Math.round(x0 + (x1 - x0 - w) / 2), y, text, font });
   };
 
   // masthead
   let y = 6;
-  ops.push({ t: 'rect', x0: PAD, y0: y, x1: WIDTH - PAD, y1: y + 2 });
-  hline(ops, y + 5, PAD, WIDTH - PAD);
+  ops.push({ t: 'rect', x0: PAD, y0: y, x1: TEXT_R, y1: y + 2 });
+  hline(ops, y + 5, PAD, TEXT_R);
   y += 9;
   ops.push({
     t: 'text',
-    x: Math.round((WIDTH - m.measure(PAPER_NAME, mast)) / 2),
+    x: Math.round(CX0 + (CX1 - CX0 - m.measure(PAPER_NAME, mast)) / 2),
     y,
     text: PAPER_NAME,
     font: mast,
   });
   y += m.ascent(mast) + m.descent(mast) + 2;
-  hline(ops, y, PAD, WIDTH - PAD);
+  hline(ops, y, PAD, TEXT_R);
   y += 5;
   centered(y, formatDate(opts.editionDate), DATE_IT);
   y += 22;
-  hline(ops, y, PAD, WIDTH - PAD);
-  y += 4;
-  const no = opts.issueNo ?? ordered.length;
-  ops.push({ t: 'text', x: PAD, y, text: (opts.editionName ?? 'Morning Edition').toUpperCase(), font: SMALL });
-  const right = `NO. ${no}`;
-  ops.push({ t: 'text', x: Math.round(WIDTH - PAD - m.measure(right, SMALL)), y, text: right, font: SMALL });
-  y += 20;
-  ops.push({ t: 'rect', x0: PAD, y0: y, x1: WIDTH - PAD, y1: y + 1 });
+  // no edition name / issue number row (user preference): the date line is followed directly by a rule
+  ops.push({ t: 'rect', x0: PAD, y0: y, x1: TEXT_R, y1: y + 1 });
   y += 10;
 
   // items
@@ -183,13 +182,13 @@ export function layoutReceipt(items: DigestItem[], opts: LayoutOptions, m: TextM
 
   // footer
   let fy = y + 4;
-  ops.push({ t: 'rect', x0: PAD, y0: fy, x1: WIDTH - PAD, y1: fy + 1 });
-  hline(ops, fy + 4, PAD, WIDTH - PAD);
+  ops.push({ t: 'rect', x0: PAD, y0: fy, x1: TEXT_R, y1: fy + 1 });
+  hline(ops, fy + 4, PAD, TEXT_R);
   fy += 12;
   const n = ordered.length;
   centered(fy, `${n} ${n === 1 ? 'story' : 'stories'}`, DATE_IT);
   fy += 22;
-  ornament(ops, fy, PAD + 60, WIDTH - PAD - 60);
+  ornament(ops, fy, PAD + 60, TEXT_R - 60);
   fy += 10;
   centered(fy, "That's all for today!", DATE_IT);
   fy += 20;

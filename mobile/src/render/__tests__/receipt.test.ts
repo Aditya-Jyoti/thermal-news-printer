@@ -2,7 +2,9 @@
 import { installNodeFonts } from '../testing';
 import { describe, it, expect, beforeAll } from '@jest/globals';
 import { renderReceipt, sampleItems } from '../index';
-import { PAD, WIDTH } from '../layout';
+import { PAD, PAD_R, WIDTH } from '../layout';
+
+const SAMPLE_HEIGHT = 1508;
 
 const opts = { editionDate: new Date(2026, 10, 7) };
 
@@ -32,9 +34,9 @@ describe('renderReceipt', () => {
     expect(c.bitmap.height).toBeGreaterThan(b.bitmap.height);
   });
 
-  it('sample height matches the python renderer (1480)', async () => {
+  it('sample height is stable (no edition row, 22px right safe margin)', async () => {
     const r = await renderReceipt(sampleItems(), opts);
-    expect(r.bitmap.height).toBe(1480);
+    expect(r.bitmap.height).toBe(SAMPLE_HEIGHT);
   });
 
   it('is deterministic', async () => {
@@ -47,7 +49,7 @@ describe('renderReceipt', () => {
   it('renders the empty digest', async () => {
     const r = await renderReceipt([], opts);
     expect(r.bitmap.width).toBe(384);
-    expect(r.bitmap.height).toBe(124 + 60 + 144);
+    expect(r.bitmap.height).toBe(100 + 60 + 144);
     expect(r.bitmap.pixels.some((v) => v === 1)).toBe(true);
   });
 
@@ -68,7 +70,7 @@ describe('renderReceipt', () => {
     // everything between header and footer rules is body text: nothing past the right padding / left padding
     let beyond = 0;
     for (let y = 130; y < height - 160; y++) {
-      for (let x = WIDTH - PAD + 1; x < WIDTH; x++) beyond += pixels[y * WIDTH + x];
+      for (let x = WIDTH - PAD_R + 1; x < WIDTH; x++) beyond += pixels[y * WIDTH + x];
       for (let x = 0; x < PAD - 2; x++) beyond += pixels[y * WIDTH + x];
     }
     expect(beyond).toBe(0);
