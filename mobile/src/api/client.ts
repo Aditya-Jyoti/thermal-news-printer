@@ -1,5 +1,5 @@
 import { ApiError, isNotImplemented } from './errors';
-import type { Api, ArticleQuery } from './types';
+import type { Api, ArticleSummary, DigestItem, Edition, EditionItem, Page } from './types';
 
 type Query = Record<string, string | number | boolean | null | undefined>;
 
@@ -49,12 +49,33 @@ export function createHttpApi(rawBase: string): Api {
     return (await res.json()) as T;
   }
 
-  const articleQuery = (q: ArticleQuery = {}): Query => ({
-    category_id: q.category_id,
-    limit: q.limit ?? 50,
-    offset: q.offset ?? 0,
-    include_political: q.include_political ?? false,
-  });
+  /** Remote backends only expose the digest preview; join it with recent articles for title/url/image. */
+  async function remoteEdition(): Promise<Edition> {
+    const [digest, cats, arts] = await Promise.all([
+      req<DigestItem[]>('GET', '/digest/preview'),
+      req<import('./types').Category[]>('GET', '/categories'),
+      req<Page<ArticleSummary>>('GET', '/articles', { query: { limit: 200, offset: 0, include_political: false } }),
+    ]);
+    const byId = new Map(arts.items.map((a) => [a.id, a]));
+    const items: EditionItem[] = [];
+    for (const d of digest) {
+      const a = byId.get(d.article_id);
+      const category = a?.category ?? cats.find((c) => c.slug === d.category_slug);
+      if (!category) continue;
+      items.push({
+        position: items.length + 1,
+        article_id: d.article_id,
+        category_slug: d.category_slug,
+        category,
+        title: a?.title ?? d.tldr.slice(0, 80),
+        url: a?.url ?? '',
+        image_url: a?.image_url ?? null,
+        published_at: a?.published_at ?? null,
+        tldr: d.tldr,
+      });
+    }
+    return { items, status: { phase: 'idle', done: 0, total: 0, no_key: false }, built_at: null };
+  }
 
   return {
     health: () => req('GET', '/health'),
@@ -67,8 +88,6 @@ export function createHttpApi(rawBase: string): Api {
     updateFeed: (id, body) => req('PATCH', `/feeds/${id}`, { body }),
     deleteFeed: (id) => req('DELETE', `/feeds/${id}`),
     refreshFeeds: (feedId) => req('POST', '/feeds/refresh', { query: { feed_id: feedId } }),
-    listArticles: (q) => req('GET', '/articles', { query: articleQuery(q) }),
-    getArticle: (id) => req('GET', `/articles/${id}`),
     listPrints: (limit = 20, offset = 0) => req('GET', '/prints', { query: { limit, offset } }),
     getPrint: (id) => req('GET', `/prints/${id}`),
     listSchedules: () => req('GET', '/schedules'),
@@ -78,8 +97,11 @@ export function createHttpApi(rawBase: string): Api {
     getSettings: () => req('GET', '/settings'),
     patchSettings: (body) => req('PATCH', '/settings', { body }),
     getModels: () => req('GET', '/models'),
-    processAi: () => req('POST', '/ai/process'),
-    digestPreview: () => req('GET', '/digest/preview'),
+    getEdition: remoteEdition,
+    async rebuildEdition() {
+      await req('POST', '/ai/process').catch(() => undefined);
+      return remoteEdition();
+    },
     async previewImage() {
       // Probe first so a 501 (renderer not available on the backend) falls back to the mock receipt.
       try {

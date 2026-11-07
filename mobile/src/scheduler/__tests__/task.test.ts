@@ -25,7 +25,7 @@ const record = (over: Partial<PrintRecord>): PrintRecord => ({
 });
 const cycleOf = (print: PrintRecord | null): CycleResult => ({
   ingest: { feeds_fetched: 0, new_articles: 0, errors: [] } as never,
-  process: { summarized: 0, flagged_political: 0, failed: 0, skipped_no_key: false },
+  edition: { items: [], status: { phase: 'idle', done: 0, total: 0, no_key: false }, built_at: null },
   print,
 });
 const item = { article_id: 1, title: 't', category_slug: 'products', tldr: 'x' } as never;

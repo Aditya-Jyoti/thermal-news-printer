@@ -15,7 +15,7 @@ import {
   getPrintedArticleIds,
   insertArticle,
   listArticles,
-  listArticlesNeedingSummary,
+  listCurationCandidates,
   listDigestCandidates,
   setPolitical,
   upsertSummary,
@@ -52,7 +52,8 @@ describe('migrations', () => {
   it('sets user_version and is idempotent', async () => {
     await migrate(db);
     const v = await db.get<{ user_version: number }>('PRAGMA user_version');
-    expect(v?.user_version).toBe(1);
+    expect(v?.user_version).toBe(2);
+    expect(await db.get("SELECT name FROM sqlite_master WHERE name='edition_items'")).not.toBeNull();
   });
 });
 
@@ -119,14 +120,19 @@ describe('articles', () => {
     await expect(getArticleDetail(db, 999)).rejects.toBeInstanceOf(NotFound);
   });
 
-  it('needing-summary excludes summarized and political', async () => {
-    const a = (await article(1))!;
-    await article(2);
-    await article(3, { isPolitical: true });
-    await upsertSummary(db, a, 'sum', 'm');
-    const rows = await listArticlesNeedingSummary(db);
-    expect(rows.map((r) => r.title)).toEqual(['Title 2']);
+  it('curation candidates: recent, unprinted, not political, newest first, capped', async () => {
+    const now = new Date(Date.UTC(2026, 0, 10));
+    const old = (await article(1))!; // 9 days old
+    const a = (await article(7))!;
+    const b = (await article(8))!;
+    await article(9, { isPolitical: true });
+    const printed = (await article(6))!;
+    await createPrint(db, 'manual', [{ article_id: printed, position: 1, category_slug: 'products', tldr: 't' }]);
+    const rows = await listCurationCandidates(db, { now, maxAgeDays: 4 });
+    expect(rows.map((r) => r.id)).toEqual([b, a]);
     expect(rows[0].category_slug).toBe('products');
+    expect(rows.map((r) => r.id)).not.toContain(old);
+    expect(await listCurationCandidates(db, { now, limit: 1 })).toHaveLength(1);
   });
 });
 

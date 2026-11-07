@@ -37,8 +37,20 @@ CREATE INDEX IF NOT EXISTS idx_articles_feed ON articles(feed_id);
 CREATE INDEX IF NOT EXISTS idx_print_items_article ON print_items(article_id);
 `;
 
+/** Migration v2: persisted upcoming edition + indexes for the hot queries. */
+const V2 = `
+CREATE TABLE IF NOT EXISTS edition_items(
+  position INTEGER PRIMARY KEY,
+  article_id INTEGER NOT NULL REFERENCES articles(id) ON DELETE CASCADE,
+  category_slug TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at);
+CREATE INDEX IF NOT EXISTS idx_articles_fetched ON articles(fetched_at);
+CREATE INDEX IF NOT EXISTS idx_feeds_category ON feeds(category_id);
+CREATE INDEX IF NOT EXISTS idx_print_items_print ON print_items(print_id);
+`;
+
 /** Append new migrations; index + 1 is the resulting PRAGMA user_version. */
-export const MIGRATIONS: string[] = [V1];
+export const MIGRATIONS: string[] = [V1, V2];
 
 export async function migrate(db: Db): Promise<void> {
   await db.exec('PRAGMA foreign_keys=ON');

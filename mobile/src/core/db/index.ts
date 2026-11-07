@@ -5,6 +5,7 @@ import { seedDefaults } from '../seed';
 export * from './adapter';
 export * from './articles';
 export * from './catalog';
+export * from './edition';
 export * from './prints';
 export * from './settings';
 export { migrate } from './schema';
