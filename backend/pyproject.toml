@@ -11,6 +11,8 @@ dependencies = [
     "httpx>=0.27",
     "beautifulsoup4>=4.12",
     "openai>=1.40",
+    "pillow>=13.0.0",
+    "bleak>=3.0.2",
 ]
 
 [dependency-groups]

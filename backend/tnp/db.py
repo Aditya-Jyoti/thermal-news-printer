@@ -411,13 +411,16 @@ def list_digest_candidates(conn: sqlite3.Connection) -> list[sqlite3.Row]:
         "FROM articles a JOIN summaries s ON s.article_id=a.id "
         "JOIN feeds f ON f.id=a.feed_id JOIN categories c ON c.id=f.category_id "
         "WHERE a.is_political=0 AND a.id NOT IN "
-        "(SELECT article_id FROM print_items WHERE article_id IS NOT NULL) "
+        "(SELECT pi.article_id FROM print_items pi JOIN prints p ON p.id=pi.print_id "
+        "WHERE pi.article_id IS NOT NULL AND p.status != 'failed') "
         "ORDER BY COALESCE(a.published_at, a.fetched_at) DESC, a.id DESC"))
 
 
 def get_printed_article_ids(conn: sqlite3.Connection) -> set[int]:
+    """Articles in a printed or in-flight (pending) print; failed prints do not count."""
     return {r[0] for r in conn.execute(
-        "SELECT DISTINCT article_id FROM print_items WHERE article_id IS NOT NULL")}
+        "SELECT DISTINCT pi.article_id FROM print_items pi JOIN prints p ON p.id=pi.print_id "
+        "WHERE pi.article_id IS NOT NULL AND p.status != 'failed'")}
 
 
 # --- prints -------------------------------------------------------------------
