@@ -4,6 +4,7 @@
  * and import this module BEFORE any render code, so Skia is mocked onto CanvasKit-in-node.
  */
 /* eslint-disable @typescript-eslint/no-require-imports */
+import { jest } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Skia } from '@shopify/react-native-skia';

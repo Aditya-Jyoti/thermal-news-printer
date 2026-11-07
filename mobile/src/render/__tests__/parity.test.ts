@@ -1,5 +1,6 @@
 /** @jest-environment @shopify/react-native-skia/jestEnv.js */
 import { installNodeFonts } from '../testing';
+import { it, expect } from '@jest/globals';
 import * as fs from 'fs';
 import * as path from 'path';
 import { renderReceipt, sampleItems } from '../index';
