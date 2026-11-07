@@ -56,11 +56,24 @@ export default function PreviewScreen() {
   } else if (probe.isLoading) {
     body = <LoadingView />;
   } else if (probe.isError) {
-    body = isNotImplemented(probe.error) ? (
-      <EmptyView title="Renderer not available yet" hint="The backend has not implemented the print renderer. Enable demo data in Settings to see a placeholder layout." />
-    ) : (
-      <ErrorView error={probe.error} onRetry={refresh} />
-    );
+    if (!isNotImplemented(probe.error)) body = <ErrorView error={probe.error} onRetry={refresh} />;
+    else if (digest.isLoading) body = <LoadingView />;
+    else if (digest.isError) body = <ErrorView error={digest.error} onRetry={refresh} />;
+    else
+      body = (
+        <View>
+          <Text variant="bodySmall" style={styles.notice}>
+            Renderer not available yet — showing approximation
+          </Text>
+          {(digest.data ?? []).length === 0 ? (
+            <EmptyView title="Nothing new to print" hint="Refresh feeds from the Feed tab." />
+          ) : (
+            <PaperFrame>
+              <ReceiptMock items={digest.data ?? []} scale={scale} />
+            </PaperFrame>
+          )}
+        </View>
+      );
   } else if (imgError) {
     body = <ErrorView error={imgError} onRetry={refresh} />;
   } else {
@@ -98,5 +111,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   toolbar: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 },
   hint: { flex: 1, opacity: 0.8 },
+  notice: { textAlign: 'center', opacity: 0.7, paddingHorizontal: 16, paddingBottom: 8 },
   scroll: { flexGrow: 1 },
 });

@@ -121,7 +121,7 @@ const prints: PrintRecord[] = [
 ];
 
 const schedules: Schedule[] = [{ id: 1, cron: '0 8 * * *', label: 'Morning edition', enabled: true }];
-let settings: Settings = { max_items_total: 8, model: 'google/gemma-3-12b-it', printer_address: null };
+let settings: Settings = { max_items_total: 8, model: 'google/gemma-3-12b-it', fallback_model: 'deepseek/deepseek-v4.1-flash', printer_address: null };
 let nextIds = { cat: 5, feed: 6, sched: 2, print: 3 };
 
 const catView = (c: CatRow): Category => ({ ...c, feed_count: feeds.filter((f) => f.category_id === c.id).length });
@@ -290,6 +290,12 @@ export function createMockApi(): Api {
       return delay({ ...settings });
     },
 
+    getModels: () =>
+      delay([
+        { id: 'google/gemma-3-12b-it', label: 'Gemma 3 12B (default)' },
+        { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' },
+      ]),
+    processAi: () => delay({ summarized: articles.filter((a) => a.tldr === null).length, flagged_political: 0, failed: 0, skipped_no_key: false }, 800),
     digestPreview: () => delay(nextBatch()),
     previewUrl: () => null,
     checkPreview: () => delay(undefined, 100),

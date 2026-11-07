@@ -47,7 +47,7 @@ npx expo export --platform android   # bundling sanity check
 | Preview | `GET /print/preview.png` in a paper frame (384px wide); "Renderer not available yet" on 501; placeholder receipt in demo mode |
 | History | Past prints, with a detail view listing `#tag` + TL;DR per item |
 | Sources | Categories (create/rename/recolor/delete, print limit stepper) and feeds (add/edit/toggle/delete, last error) |
-| Settings | Print now, schedules (time picker -> `M H * * *`, or raw cron), max items, model, printer address, backend URL, demo toggle |
+| Settings | Print now, schedules (time picker -> `M H * * *`, or raw cron), max items, summarization + fallback model pickers (from `GET /models`, or custom id), printer address, backend URL, demo toggle |
 
 Article detail (`/article/[id]`) and print detail (`/print/[id]`) are stack screens.
 

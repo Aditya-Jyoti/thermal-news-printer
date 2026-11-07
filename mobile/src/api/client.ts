@@ -77,6 +77,8 @@ export function createHttpApi(rawBase: string): Api {
     deleteSchedule: (id) => req('DELETE', `/schedules/${id}`),
     getSettings: () => req('GET', '/settings'),
     patchSettings: (body) => req('PATCH', '/settings', { body }),
+    getModels: () => req('GET', '/models'),
+    processAi: () => req('POST', '/ai/process'),
     digestPreview: () => req('GET', '/digest/preview'),
     previewUrl: (nonce) => `${base}/print/preview.png?t=${nonce}`,
     async checkPreview() {

@@ -25,6 +25,15 @@ export function ArticleCard({ article, onPress }: { article: ArticleSummary; onP
           ) : null}
         </View>
         <Text variant="titleMedium">{article.title}</Text>
+        {article.tldr ? (
+          <Text variant="bodyMedium" numberOfLines={3}>
+            {article.tldr}
+          </Text>
+        ) : article.is_political ? null : (
+          <Text variant="bodySmall" style={styles.pending}>
+            Summarizing…
+          </Text>
+        )}
         {meta ? (
           <Text variant="bodySmall" style={styles.meta}>
             {meta}
@@ -41,5 +50,6 @@ const styles = StyleSheet.create({
   content: { paddingTop: 12, gap: 6 },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   meta: { opacity: 0.7 },
+  pending: { opacity: 0.55, fontStyle: 'italic' },
   printed: { opacity: 0.6 },
 });

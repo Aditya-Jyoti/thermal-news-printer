@@ -21,6 +21,7 @@ export const keys = {
   schedules: ['schedules'] as const,
   settings: ['settings'] as const,
   digest: ['digest'] as const,
+  models: ['models'] as const,
 };
 
 export const useCategories = () => {
@@ -64,6 +65,11 @@ export const useSchedules = () => {
 export const useBackendSettings = () => {
   const api = useApi();
   return useQuery({ queryKey: keys.settings, queryFn: () => api.getSettings() });
+};
+
+export const useModels = () => {
+  const api = useApi();
+  return useQuery({ queryKey: keys.models, queryFn: () => api.getModels(), retry: false, staleTime: 5 * 60_000 });
 };
 
 export const useDigestPreview = () => {
@@ -115,6 +121,11 @@ export const useDeleteFeed = () => {
 export const useRefreshFeeds = () => {
   const api = useApi();
   return useInvalidating((feedId?: number | null) => api.refreshFeeds(feedId), [keys.articles, keys.feeds, keys.digest]);
+};
+
+export const useProcessAi = () => {
+  const api = useApi();
+  return useInvalidating(() => api.processAi(), [keys.articles, keys.digest]);
 };
 
 export const useCreateSchedule = () => {
