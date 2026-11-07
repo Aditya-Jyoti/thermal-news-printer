@@ -295,7 +295,7 @@ export function createMockApi(): Api {
         { id: 'google/gemma-3-12b-it', label: 'Gemma 3 12B (default)' },
         { id: 'deepseek/deepseek-v4.1-flash', label: 'DeepSeek V4.1 Flash' },
       ]),
-    processAi: () => delay({ summarized: arts.filter((a) => a.tldr === null).length, flagged_political: 0, failed: 0, skipped_no_key: false }, 800),
+    processAi: () => delay({ summarized: articles.filter((a) => a.tldr === null).length, flagged_political: 0, failed: 0, skipped_no_key: false }, 800),
     digestPreview: () => delay(nextBatch()),
     previewUrl: () => null,
     checkPreview: () => delay(undefined, 100),

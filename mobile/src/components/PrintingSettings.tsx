@@ -2,10 +2,11 @@ import React, { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, IconButton, Text, TextInput } from 'react-native-paper';
 
-import { useBackendSettings, usePatchSettings } from '@/api/hooks';
+import { useBackendSettings, useModels, usePatchSettings } from '@/api/hooks';
 import type { Settings } from '@/api/types';
 
 import { ErrorView, LoadingView } from './common';
+import { ModelPicker } from './ModelPicker';
 
 interface Handlers {
   onError: (e: unknown) => void;
@@ -22,11 +23,13 @@ export function PrintingSettings(h: Handlers) {
 
 function PrintingForm({ saved, onError, onSaved }: Handlers & { saved: Settings }) {
   const patch = usePatchSettings();
+  const models = useModels();
   const [max, setMax] = useState(saved.max_items_total);
   const [model, setModel] = useState(saved.model);
+  const [fallback, setFallback] = useState<string | null>(saved.fallback_model);
   const [printer, setPrinter] = useState(saved.printer_address ?? '');
 
-  const dirty = max !== saved.max_items_total || model.trim() !== saved.model || (printer.trim() || null) !== saved.printer_address;
+  const dirty = max !== saved.max_items_total || model.trim() !== saved.model || (fallback?.trim() || null) !== saved.fallback_model || (printer.trim() || null) !== saved.printer_address;
 
   return (
     <View style={styles.box}>
@@ -40,7 +43,14 @@ function PrintingForm({ saved, onError, onSaved }: Handlers & { saved: Settings 
         </Text>
         <IconButton mode="contained-tonal" icon="plus" size={18} disabled={max >= 30} onPress={() => setMax(max + 1)} />
       </View>
-      <TextInput label="AI model (OpenRouter)" value={model} onChangeText={setModel} autoCapitalize="none" autoCorrect={false} mode="outlined" />
+      {models.isLoading ? (
+        <LoadingView />
+      ) : (
+        <>
+          <ModelPicker label="Summarization model" value={model} onChange={(v) => setModel(v ?? '')} options={models.isError ? null : (models.data ?? null)} />
+          <ModelPicker label="Fallback model" value={fallback} onChange={setFallback} options={models.isError ? null : (models.data ?? null)} allowNone />
+        </>
+      )}
       <TextInput
         label="Printer BLE address"
         placeholder="AA:BB:CC:DD:EE:FF"
@@ -56,7 +66,7 @@ function PrintingForm({ saved, onError, onSaved }: Handlers & { saved: Settings 
         loading={patch.isPending}
         onPress={() =>
           patch.mutate(
-            { max_items_total: max, model: model.trim(), printer_address: printer.trim() || null },
+            { max_items_total: max, model: model.trim(), fallback_model: fallback?.trim() || null, printer_address: printer.trim() || null },
             { onSuccess: onSaved, onError },
           )
         }
