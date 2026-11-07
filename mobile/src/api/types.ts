@@ -170,6 +170,6 @@ export interface Api {
   /** Preview PNG URL (cache-busted). Null in demo mode (in-app mock receipt is rendered instead). */
   previewUrl(nonce: number): string | null;
   /** Probe the renderer: throws ApiError(501) when unavailable. */
-  checkPreview(): Promise<void>;
+  checkPreview(): Promise<true>; // resolves true when the backend renderer is available
   printNow(): Promise<PrintRecord>;
 }

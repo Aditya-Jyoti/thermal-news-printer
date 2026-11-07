@@ -81,8 +81,10 @@ export function createHttpApi(rawBase: string): Api {
     processAi: () => req('POST', '/ai/process'),
     digestPreview: () => req('GET', '/digest/preview'),
     previewUrl: (nonce) => `${base}/print/preview.png?t=${nonce}`,
-    async checkPreview() {
+    async checkPreview(): Promise<true> {
+      // react-query rejects undefined results, so resolve a concrete value
       await raw('GET', '/print/preview.png', { query: { probe: Date.now() } });
+      return true;
     },
     printNow: () => req('POST', '/print'),
   };
