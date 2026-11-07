@@ -1,9 +1,12 @@
-"""Original pixel-art mascot for the receipt margin: "Whiskers", a cat reporter in a press hat.
+"""Original pixel-art mascot for the receipt margin: a little newsie (paperboy).
 
-Frames are ASCII grids (16 columns wide), composed from a shared head/body plus per-pose
-patches, then scaled with nearest-neighbour and dithered by the renderer.
+A kid in a flat cap and dark jacket, a white strap across the chest leading to a satchel of
+rolled-up papers on the hip. Frames are ASCII grids (16 columns wide) composed from shared
+parts plus per-pose patches, then scaled with nearest-neighbour. The art is bold on purpose:
+solid black/white with a single small area of light shading (the satchel flap), rendered as a
+regular checker pattern rather than error diffusion so it never turns into speckle.
 
-Legend: '.' transparent, '#' black, 'd' dark grey, 'g' light grey (fur), 'w' white.
+Legend: '.' transparent, '#' black, 'w' white, 'g' light shading (checker dither).
 """
 from __future__ import annotations
 
@@ -11,173 +14,141 @@ from PIL import Image
 
 W = 16
 SCALE = 3
-OVERLAY_ROWS = 7  # rows reserved above the hat for "!", "?", gear
-SHADES = {"#": 0, "d": 95, "g": 205, "w": 255}
+OVERLAY_ROWS = 7   # rows above the cap reserved for the floating "!", "?" and cog
+SHADES = {"#": 0, "w": 255, "g": 128}
 
-_HEAD = [
-    "..#..######..#..",
-    "..##.#dddd#.##..",
-    ".#g##########g#.",
-    ".#gggggggggggg#.",
-    ".#gggggggggggg#.",
-    ".#gg##gggg##gg#.",  # eyes (rows 5-6)
-    ".#gg##gggg##gg#.",
-    "##gggww##wwggg##",  # nose + whiskers
-    "..#gggwwwwggg#..",
-    "...##########...",
+_CAP = [
+    "....########....",
+    "..############..",
+    "..############..",
+    "..#############.",   # brim pokes out to the right
+]
+_FACE = [
+    "...#wwwwwwww#...",
+    "...#wwwwwwww#...",
+    "...#wwwwwwww#...",
+    "....#wwwwww#....",
+    ".....######.....",
 ]
 _EYES = {
-    "open": [".#gg##gggg##gg#.", ".#gg##gggg##gg#."],
-    "blink": [".#gggggggggggg#.", ".#gg##gggg##gg#."],
-    "wide": [".#g#ww#gg#ww#g#.", ".#g#w##gg#w##g#."],
-    "up": [".#gg##gggg##gg#.", ".#gggggggggggg#."],
-    "happy": [".#gg#gggggg#gg#.", ".#g#g#gg#g#g#g#."],
+    "open": ("...#w#wwww#w#...", "...#w#wwww#w#..."),
+    "blink": ("...#wwwwwwww#...", "...#w#wwww#w#..."),
+    "up": ("...#w#wwww#w#...", "...#wwwwwwww#..."),
+    "wide": ("...#w#wwww#w#...", "...#w#wwww#w#..."),
+    "happy": ("...#wwwwwwww#...", "...#w#wwww#w#..."),
 }
 _MOUTH = {
-    "smile": "..#ggw#ww#wgg#..",
-    "o": "..#gggw##wggg#..",
-    "flat": "..#gggwwwwggg#..",
+    "flat": "....#wwwwww#....",
+    "smile": "....#w#ww#w#....",
+    "o": "....#ww##ww#....",
 }
 _TORSO = [
-    "....#d#ww#d#....",
-    "....#dddddd#....",
-    "....#dddddd#....",
-    "....#dddddd#....",
-    "....########....",
+    "...##w#wwww##...",
+    "...##ww#www##...",
+    "...##www#ww##...",
+    "...##wwwwww##...",
+    "...##########...",
 ]
+_SATCHEL = [
+    "..##.##",
+    ".#ww#ww",
+    "#######",
+    "#ggggg#",
+    "#######",
+]
+_SATCHEL_COL = 9
 _LEGS = {
-    "idle": ["....#gg##gg#....", "....#gg##gg#....", "...###.##.###..."],
-    "a": ["....#gg##gg#....", "...#gg#..#gg#...", "..###......###.."],
-    "b": ["....#gg##gg#....", "....#gg##g#.....", "...###.###......"],
+    "stand": ["....###..###....", "....###..###....", "....###..###....", "...####..####..."],
+    "wideA": ["....###..###....", "...###....###...", "..###......###..", ".####......####."],
+    "wideB": ["....###..###....", "...###....###...", "...###...###....", "..####..####...."],
+    "pass": ["....###..###....", ".....######.....", ".....##..##.....", "....###..###...."],
+    "jump": ["....###..###....", "...###....###...", "...###....###...", "..###......###.."],
 }
-_HEAD_TOP = OVERLAY_ROWS          # row where the hat starts
-_TORSO_TOP = _HEAD_TOP + len(_HEAD)
+_HEAD_TOP = OVERLAY_ROWS
+_TORSO_TOP = _HEAD_TOP + len(_CAP) + len(_FACE)
 _LEGS_TOP = _TORSO_TOP + len(_TORSO)
-HEIGHT = _LEGS_TOP + 3
+HEIGHT = _LEGS_TOP + 4 + 1  # +1 spare row so a bob / jump can lift the figure
 
-_OVERLAYS = {
-    "!": [
-        "....##....",
-        "....##....",
-        "....##....",
-        "....##....",
-        "..........",
-        "....##....",
-        "....##....",
-    ],
-    "?": [
-        "...####...",
-        "..##..##..",
-        "......##..",
-        ".....##...",
-        "....##....",
-        "..........",
-        "....##....",
-    ],
-    "gear": [
-        "...#.#....",
-        ".#######..",
-        "..##.##...",
-        "###...###.",
-        "..##.##...",
-        ".#######..",
-        "...#.#....",
-    ],
+_OVERLAYS = {  # (left column, rows)
+    "!": (4, ["...##...", "...##...", "...##...", "...##...", "........", "...##..."]),
+    "?": (4, ["..####..", ".##..##.", "....##..", "...##...", "........", "...##..."]),
+    "cog": (4, ["...##...", ".######.", "###..###", "##....##", "###..###", ".######.", "...##..."]),
 }
 
 
-def _patch(grid: list[list[str]], top: int, left: int, rows: list[str]) -> None:
+def _put(grid, top: int, left: int, rows: list[str], *, opaque: bool = False) -> None:
     for dr, row in enumerate(rows):
         for dc, ch in enumerate(row):
-            if ch not in ". " and 0 <= top + dr < len(grid) and 0 <= left + dc < W:
+            if (ch != "." or opaque) and 0 <= top + dr < len(grid) and 0 <= left + dc < W:
                 grid[top + dr][left + dc] = ch
 
 
-def _arms_down(g: list[list[str]]) -> None:
-    t = _TORSO_TOP
-    for r in (1, 2, 3):
-        g[t + r][3], g[t + r][2] = "d", "#"
-        g[t + r][12], g[t + r][13] = "d", "#"
-    g[t + 4][2] = "g"
-    g[t + 4][13] = "g"
+def _arm(g, t: int, side: str, kind: str) -> None:
+    """2-wide black sleeves at the figure's edges, a 1px gap away from the jacket."""
+    x = 0 if side == "L" else 14
+    if kind == "down":
+        _put(g, t, x, ["##"] * 4)
+    elif kind == "fwd":      # swung out and up
+        _put(g, t - 1, x, ["##"] * 4)
+    elif kind == "back":     # swung back, a touch lower
+        _put(g, t + 1, x, ["##"] * 4)
+    elif kind == "up":       # raised overhead (cheer / wave / hold up a tool)
+        _put(g, t - 3, x, ["##"] * 6)
+    elif kind == "chin":     # forearm up to the chin (thinking)
+        _put(g, t + 1, 14, ["##", "##", "##"])
+        _put(g, t - 2, 12, ["##", "##", "##"])
+        _put(g, t + 1, 13, ["#"])
 
 
-def _clear(g: list[list[str]], cells: list[tuple[int, int]]) -> None:
-    for r, c in cells:
-        g[r][c] = "."
-
-
-def _build(
-    *, eyes: str = "open", mouth: str = "smile", legs: str = "idle", pose: str = "down",
-    overlay: str | None = None,
-) -> list[str]:
+def _build(*, eyes="open", mouth="flat", legs="stand", larm="down", rarm="down", prop=None,
+           overlay=None, lift=0) -> list[str]:
     g = [["."] * W for _ in range(HEIGHT)]
-    head = list(_HEAD)
-    head[5], head[6] = _EYES[eyes]
-    head[8] = _MOUTH[mouth]
-    _patch(g, _HEAD_TOP, 0, head)
-    _patch(g, _TORSO_TOP, 0, _TORSO)
-    _patch(g, _LEGS_TOP, 0, _LEGS[legs])
-    t = _TORSO_TOP
-    if pose == "down":
-        _arms_down(g)
-    elif pose == "read":  # holds up a little newspaper
-        _patch(g, t - 1, 0, [
-            "..############..",
-            "..#wwwwwwwwww#..",
-            "..#w######wwww#.",
-            "..#wwwwwwwwww#..",
-            "..#w#####w##w#..",
-            "..#wwwwwwwwww#..",
-            "..##g######g##..",
-        ])
-    elif pose == "wave":
-        _arms_down(g)
-        _clear(g, [(t + 1, 12), (t + 1, 13), (t + 2, 12), (t + 2, 13), (t + 3, 12), (t + 3, 13),
-                   (t + 4, 13)])
-        _patch(g, t - 3, 12, ["..gg", "..#g", "..##", "..#.", "..#.", ".##."])
-        _patch(g, t + 1, 12, ["#d.."])
-    elif pose == "up":  # hands up in surprise
-        _patch(g, t - 3, 0, [
-            ".gg..........gg.",
-            ".##..........##.",
-            "..#d........d#..",
-            "..#d........d#..",
-            "..#d........d#..",
-        ])
-    elif pose == "think":  # paw on chin
-        _arms_down(g)
-        _clear(g, [(t + r, c) for r in (1, 2, 3) for c in (12, 13)] + [(t + 4, 13)])
-        _patch(g, t - 1, 0, ["...........gg...", "...........#g#.", "..........#d#..."])
-        _patch(g, t + 2, 0, ["..........d#...."])
-    elif pose == "wrench":
-        _arms_down(g)
-        _clear(g, [(t + 2, 12), (t + 2, 13), (t + 3, 12), (t + 3, 13), (t + 4, 13)])
-        _patch(g, t - 2, 0, [
-            "...........#.#..",
-            "...........###..",
-            "............#.g.",
-            "...........d#gg.",
-            "..........d.#...",
-            "............#...",
-        ])
+    base = 1 - lift  # one spare row above the figure; lift raises it (bob / jump)
+    head = list(_FACE)
+    head[1], head[2] = _EYES[eyes]
+    head[3] = _MOUTH[mouth]
+    _put(g, _HEAD_TOP + base, 0, _CAP)
+    _put(g, _HEAD_TOP + base + len(_CAP), 0, head)
+    t = _TORSO_TOP + base
+    _put(g, t, 0, _TORSO)
+    _arm(g, t, "L", larm)
+    _arm(g, t, "R", rarm)
+    _put(g, _LEGS_TOP + base, 0, _LEGS[legs])
+    if prop == "paper":      # newspaper held open in front of the torso
+        _put(g, t - 1, 2, [
+            "############",
+            "#wwwwwwwwww#",
+            "#w#####wwww#",
+            "#wwwwwwwwww#",
+            "#w##w###ww##",
+            "#wwwwwwwwww#",
+            "############",
+        ], opaque=True)
+    else:
+        _put(g, t + 2, _SATCHEL_COL, _SATCHEL, opaque=True)
     if overlay:
-        _patch(g, 0, 3, _OVERLAYS[overlay])
+        left, rows = _OVERLAYS[overlay]
+        _put(g, 0, left, rows)
     return ["".join(r) for r in g]
 
 
 FRAMES: dict[str, list[str]] = {
-    "walk_a": _build(legs="a", pose="down", mouth="flat"),
-    "walk_b": _build(legs="b", pose="down", mouth="flat", eyes="blink"),
-    "read": _build(legs="idle", pose="read", eyes="up", mouth="flat"),
-    "idle": _build(legs="idle", pose="down"),
-    "surprised": _build(legs="idle", pose="up", eyes="wide", mouth="o", overlay="!"),
-    "thinking": _build(legs="idle", pose="think", eyes="up", mouth="flat", overlay="?"),
-    "tinker": _build(legs="b", pose="wrench", eyes="open", mouth="smile", overlay="gear"),
-    "wave": _build(legs="idle", pose="wave", eyes="happy", mouth="smile"),
+    # 4-frame walk cycle: contact, passing (bobbed up), contact, passing
+    "walk_a": _build(legs="wideA", larm="fwd", rarm="back"),
+    "walk_b": _build(legs="pass", lift=1),
+    "walk_c": _build(legs="wideB", larm="back", rarm="fwd"),
+    "walk_d": _build(legs="pass", lift=1, eyes="blink"),
+    "read": _build(prop="paper", eyes="up"),
+    "idle": _build(),
+    "surprised": _build(legs="jump", larm="up", rarm="up", eyes="wide", mouth="o", lift=1,
+                        overlay="!"),
+    "thinking": _build(rarm="chin", eyes="up", overlay="?"),
+    "tinker": _build(rarm="up", mouth="smile", overlay="cog"),
+    "wave": _build(rarm="up", eyes="happy", mouth="smile"),
 }
+WALK_CYCLE = ["walk_a", "walk_b", "walk_c", "walk_d"]
 
-# Tag slug -> reaction frame; anything else idles.
+# Tag slug -> reaction frame; anything else reads the paper.
 REACTIONS = {
     "products": "surprised",
     "psychology": "thinking",
@@ -187,23 +158,30 @@ REACTIONS = {
 
 
 def frame_for_tag(slug: str) -> str:
-    return REACTIONS.get(slug, "idle")
+    return REACTIONS.get(slug, "read")
 
 
 def sprite_image(name: str, scale: int = SCALE) -> Image.Image:
-    """Return an 'LA' image: grey levels in L, alpha mask where the sprite is opaque."""
+    """Return an 'LA' image. L is already 0/255 (checker pattern for 'g'); A masks the sprite."""
     rows = FRAMES[name]
     h = len(rows)
-    lum = Image.new("L", (W, h), 255)
-    alpha = Image.new("L", (W, h), 0)
+    size = (W * scale, h * scale)
+    lum = Image.new("L", size, 255)
+    alpha = Image.new("L", size, 0)
     lp, ap = lum.load(), alpha.load()
     for y, row in enumerate(rows):
         for x, ch in enumerate(row):
-            if ch in SHADES:
-                lp[x, y] = SHADES[ch]
-                ap[x, y] = 255
-    size = (W * scale, h * scale)
-    return Image.merge("LA", (lum.resize(size, Image.NEAREST), alpha.resize(size, Image.NEAREST)))
+            if ch not in SHADES:
+                continue
+            for dy in range(scale):
+                for dx in range(scale):
+                    px, py = x * scale + dx, y * scale + dy
+                    ap[px, py] = 255
+                    if ch == "#":
+                        lp[px, py] = 0
+                    elif ch == "g":
+                        lp[px, py] = 0 if (px + py) % 2 == 0 else 255
+    return Image.merge("LA", (lum, alpha))
 
 
 SIZE = (W * SCALE, HEIGHT * SCALE)
