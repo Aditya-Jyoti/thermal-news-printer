@@ -57,8 +57,6 @@ function Navigator() {
         }}
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="article/[id]" options={{ title: 'Article' }} />
-        <Stack.Screen name="print/[id]" options={{ title: 'Print' }} />
       </Stack>
     </>
   );

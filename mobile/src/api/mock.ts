@@ -1,7 +1,6 @@
 import { ApiError } from './errors';
 import type {
   Api,
-  ArticleDetail,
   ArticleSummary,
   Category,
   DigestItem,

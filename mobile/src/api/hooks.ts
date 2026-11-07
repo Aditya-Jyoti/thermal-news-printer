@@ -14,13 +14,10 @@ import type {
 export const keys = {
   categories: ['categories'] as const,
   feeds: ['feeds'] as const,
-  articles: ['articles'] as const,
-  article: (id: number) => ['article', id] as const,
+  edition: ['edition'] as const,
   prints: ['prints'] as const,
-  print: (id: number) => ['print', id] as const,
   schedules: ['schedules'] as const,
   settings: ['settings'] as const,
-  digest: ['digest'] as const,
   models: ['models'] as const,
 };
 
@@ -34,27 +31,16 @@ export const useFeeds = () => {
   return useQuery({ queryKey: keys.feeds, queryFn: () => api.listFeeds() });
 };
 
-export const useArticles = (categoryId: number | null) => {
+/** The AI-curated upcoming edition. Kept fresh by pipeline events (see ApiProvider), not by polling. */
+export const useEdition = () => {
   const api = useApi();
-  return useQuery({
-    queryKey: [...keys.articles, categoryId],
-    queryFn: () => api.listArticles({ category_id: categoryId, limit: 50 }),
-  });
+  return useQuery({ queryKey: keys.edition, queryFn: () => api.getEdition(), staleTime: 60_000 });
 };
 
-export const useArticle = (id: number) => {
+/** Printed editions, newest first. */
+export const usePrints = (limit = 50) => {
   const api = useApi();
-  return useQuery({ queryKey: keys.article(id), queryFn: () => api.getArticle(id) });
-};
-
-export const usePrints = () => {
-  const api = useApi();
-  return useQuery({ queryKey: keys.prints, queryFn: () => api.listPrints(50, 0) });
-};
-
-export const usePrint = (id: number) => {
-  const api = useApi();
-  return useQuery({ queryKey: keys.print(id), queryFn: () => api.getPrint(id) });
+  return useQuery({ queryKey: [...keys.prints, limit], queryFn: () => api.listPrints(limit, 0), staleTime: 60_000 });
 };
 
 export const useSchedules = () => {
@@ -70,11 +56,6 @@ export const useBackendSettings = () => {
 export const useModels = () => {
   const api = useApi();
   return useQuery({ queryKey: keys.models, queryFn: () => api.getModels(), retry: false, staleTime: 5 * 60_000 });
-};
-
-export const useDigestPreview = () => {
-  const api = useApi();
-  return useQuery({ queryKey: keys.digest, queryFn: () => api.digestPreview() });
 };
 
 /** Mutation helper that invalidates the given query keys on success. */
@@ -94,12 +75,12 @@ export const useUpdateCategory = () => {
   const api = useApi();
   return useInvalidating(
     (v: { id: number; body: CategoryUpdate }) => api.updateCategory(v.id, v.body),
-    [keys.categories, keys.articles, keys.digest],
+    [keys.categories, keys.edition],
   );
 };
 export const useDeleteCategory = () => {
   const api = useApi();
-  return useInvalidating((id: number) => api.deleteCategory(id), [keys.categories, keys.feeds, keys.articles, keys.digest]);
+  return useInvalidating((id: number) => api.deleteCategory(id), [keys.categories, keys.feeds, keys.edition]);
 };
 
 export const useCreateFeed = () => {
@@ -110,22 +91,22 @@ export const useUpdateFeed = () => {
   const api = useApi();
   return useInvalidating(
     (v: { id: number; body: FeedUpdate }) => api.updateFeed(v.id, v.body),
-    [keys.feeds, keys.categories, keys.articles],
+    [keys.feeds, keys.categories, keys.edition],
   );
 };
 export const useDeleteFeed = () => {
   const api = useApi();
-  return useInvalidating((id: number) => api.deleteFeed(id), [keys.feeds, keys.categories, keys.articles]);
+  return useInvalidating((id: number) => api.deleteFeed(id), [keys.feeds, keys.categories, keys.edition]);
 };
 
 export const useRefreshFeeds = () => {
   const api = useApi();
-  return useInvalidating((feedId?: number | null) => api.refreshFeeds(feedId), [keys.articles, keys.feeds, keys.digest]);
+  return useInvalidating((feedId?: number | null) => api.refreshFeeds(feedId), [keys.feeds, keys.edition]);
 };
 
-export const useProcessAi = () => {
+export const useRebuildEdition = () => {
   const api = useApi();
-  return useInvalidating(() => api.processAi(), [keys.articles, keys.digest]);
+  return useInvalidating(() => api.rebuildEdition(), [keys.edition]);
 };
 
 export const useCreateSchedule = () => {
@@ -143,10 +124,10 @@ export const useDeleteSchedule = () => {
 
 export const usePatchSettings = () => {
   const api = useApi();
-  return useInvalidating((b: Partial<Settings>) => api.patchSettings(b), [keys.settings, keys.digest]);
+  return useInvalidating((b: Partial<Settings>) => api.patchSettings(b), [keys.settings, keys.edition]);
 };
 
 export const usePrintNow = () => {
   const api = useApi();
-  return useInvalidating(() => api.printNow(), [keys.prints, keys.articles, keys.digest]);
+  return useInvalidating(() => api.printNow(), [keys.prints, keys.edition]);
 };

@@ -52,7 +52,11 @@ export function PrinterSettings({ selectedId, onSelect }: Props) {
       }
       await driver.print(makeTestBitmap(), {
         deviceId: selectedId ?? undefined,
-        onProgress: (p) => setProgress(p.totalBytes ? p.sentBytes / p.totalBytes : 0),
+        onProgress: (p) => {
+          // The driver reports per chunk (hundreds of times): only re-render on whole-percent changes.
+          const next = p.totalBytes ? Math.round((p.sentBytes / p.totalBytes) * 100) / 100 : 0;
+          setProgress((prev) => (prev === next ? prev : next));
+        },
       });
       setSnack('Test page sent to the printer.');
     } catch (e) {
@@ -71,7 +75,7 @@ export function PrinterSettings({ selectedId, onSelect }: Props) {
       <Text variant="bodyMedium">{selectedId ? `${selectedLabel} (${selectedId})` : 'No printer selected'}</Text>
 
       <View style={styles.row}>
-        <Button mode="contained-tonal" icon="bluetooth-search" onPress={scan} loading={scanning} disabled={scanning || progress !== null}>
+        <Button mode="contained-tonal" icon="bluetooth" onPress={scan} loading={scanning} disabled={scanning || progress !== null}>
           {scanning ? 'Scanning...' : 'Scan'}
         </Button>
         <Button mode="contained" icon="printer" onPress={printTest} disabled={scanning || progress !== null || !selectedId}>
