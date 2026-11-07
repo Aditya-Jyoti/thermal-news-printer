@@ -6,12 +6,17 @@ import re
 MAX_INPUT_CHARS = 12000
 
 _URL_ONLY = re.compile(r"^\(?<?(?:https?://|www\.)\S+>?\)?[.,]?$", re.IGNORECASE)
-# Short lines (<= 120 chars) that start with a call-to-action.
+# Bare one-to-four word labels ("Subscribe", "Share", "Read more").
+_BARE = re.compile(
+    r"^(?:subscribe|share|sponsored|sponsor|advertisement|read more|continue reading|leave a comment|"
+    r"sign up|click here|show notes|transcript|full transcript|listen now|watch now)\b[\w\s!.:|-]{0,20}$",
+    re.IGNORECASE,
+)
+# Short call-to-action lines (<= 120 chars).
 _SHORT_CTA = re.compile(
-    r"^(?:subscribe|share|sponsored|sponsor|advertisement|read more|continue reading|"
-    r"listen (?:to|now|on)|watch (?:the|on|now)|leave a comment|like and subscribe|"
-    r"follow us|sign up|click here|get the newsletter|support (?:us|the show)|"
-    r"(?:the )?full (?:episode|transcript)|show notes|transcript)\b",
+    r"^(?:listen (?:to|now|on)|watch (?:the|on|now)|subscribe (?:to|now|here|on|for)|share (?:this|on|via|with)|"
+    r"leave a comment|like and subscribe|follow us|sign up (?:for|to|now)|click here|get the newsletter|"
+    r"support (?:us|the show)|(?:the )?full (?:episode|transcript))\b",
     re.IGNORECASE,
 )
 # Lines of any (reasonable) length that are boilerplate by their opening.
@@ -34,6 +39,8 @@ def _is_boilerplate(line: str) -> bool:
     if not s:
         return False
     if _URL_ONLY.match(s):
+        return True
+    if len(s.split()) <= 4 and _BARE.match(s):
         return True
     if len(s) <= 120 and _SHORT_CTA.match(s):
         return True

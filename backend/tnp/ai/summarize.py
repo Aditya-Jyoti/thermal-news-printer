@@ -65,6 +65,11 @@ Reply with ONLY a JSON object, no code fences:
 {{"political": true or false, "reason": "max 12 words", "tldr": "the TL;DR text"}}"""
 
 
+def _score(tldr: str, in_chars: int) -> tuple[int, int]:
+    """Lower is better: fewer quality issues first, then more words."""
+    return len(quality_issues(tldr, input_chars=in_chars)), -len(tldr.split())
+
+
 def _article_block(article: ArticleForAI) -> str:
     body = prepare_body(article.content_text or "")
     if not body:
@@ -140,8 +145,7 @@ def summarize(
             try:  # one stricter retry on the same model
                 retry = clean_tldr(chat(client, model=m, system=SUMMARY_SYSTEM_PROMPT, user=user + STRICT_NUDGE,
                                         max_tokens=SUMMARY_MAX_TOKENS))
-                if retry and (not tldr or len(quality_issues(retry, input_chars=in_chars))
-                              <= len(quality_issues(tldr, input_chars=in_chars))):
+                if retry and _score(retry, in_chars) < _score(tldr, in_chars):
                     tldr = retry
             except AIError:
                 pass  # keep the first answer
@@ -204,8 +208,7 @@ def summarize_and_classify(
         if quality_issues(tldr, input_chars=in_chars):
             try:  # one stricter retry on the same model
                 tldr2, raw2 = once(m, user + STRICT_NUDGE)
-                if tldr2 and (not tldr or len(quality_issues(tldr2, input_chars=in_chars))
-                              <= len(quality_issues(tldr, input_chars=in_chars))):
+                if tldr2 and _score(tldr2, in_chars) < _score(tldr, in_chars):
                     tldr, raw = tldr2, raw2
             except AIError:
                 pass  # keep the first answer
