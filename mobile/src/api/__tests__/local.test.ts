@@ -63,9 +63,9 @@ describe('local Api shapes', () => {
     expect((await api.getModels()).map((m) => m.id)).toContain('google/gemma-3-12b-it');
     const cats = await api.listCategories();
     expect(cats[0]).toEqual({ id: 1, name: 'Products', slug: 'products', color: null, print_limit: 2, feed_count: 2 });
-    expect(await api.listFeeds(cats[1].id)).toHaveLength(1);
+    expect(await api.listFeeds(cats[1].id)).toHaveLength(4);
     expect(await api.listSchedules()).toEqual([{ id: 1, cron: '0 8 * * *', label: 'Morning edition', enabled: true }]);
-    expect(await api.getSettings()).toEqual({ max_items_total: 8, model: 'google/gemma-3-12b-it', fallback_model: 'deepseek/deepseek-v4.1-flash', printer_address: null });
+    expect(await api.getSettings()).toEqual({ max_items_total: 8, max_age_days: 3, model: 'google/gemma-3-12b-it', fallback_model: 'deepseek/deepseek-v4.1-flash', printer_address: null });
   });
 
   it('CRUD with REST-like errors', async () => {
@@ -95,8 +95,8 @@ describe('local Api shapes', () => {
 
   it('refreshFeeds returns an IngestResult', async () => {
     const r = await api.refreshFeeds();
-    expect(r.feeds_checked).toBe(5);
-    expect(Object.keys(r.errors)).toHaveLength(5);
+    expect(r.feeds_checked).toBe(11);
+    expect(Object.keys(r.errors)).toHaveLength(11);
     await rejects(api.refreshFeeds(999), 404);
   });
 

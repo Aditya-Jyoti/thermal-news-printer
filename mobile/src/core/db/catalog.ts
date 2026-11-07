@@ -1,7 +1,7 @@
 import type { Category, Feed } from '../../api/types';
 import { Conflict, NotFound } from '../errors';
 import { exists, type Db, type SqlValue } from './adapter';
-import { nowIso } from './time';
+import { isStale, nowIso } from './time';
 
 // --- categories ---------------------------------------------------------------
 
@@ -120,7 +120,7 @@ export interface FeedRow {
   created_at: string;
 }
 
-const toFeed = (r: FeedRow): Feed => ({
+const toFeed = (r: FeedRow & { newest_at?: string | null }): Feed => ({
   id: r.id,
   url: r.url,
   title: r.title,
@@ -128,13 +128,17 @@ const toFeed = (r: FeedRow): Feed => ({
   enabled: r.enabled !== 0,
   last_fetched_at: r.last_fetched_at,
   last_error: r.last_error,
+  newest_at: r.newest_at ?? null,
+  stale: isStale(r.newest_at ?? null),
 });
+
+const NEWEST = '(SELECT MAX(COALESCE(a.published_at, a.fetched_at)) FROM articles a WHERE a.feed_id=feeds.id) AS newest_at';
 
 export async function listFeeds(db: Db, categoryId?: number | null): Promise<Feed[]> {
   const rows =
     categoryId !== undefined && categoryId !== null
-      ? await db.all<FeedRow>('SELECT * FROM feeds WHERE category_id=? ORDER BY id', [categoryId])
-      : await db.all<FeedRow>('SELECT * FROM feeds ORDER BY id');
+      ? await db.all<FeedRow>(`SELECT feeds.*, ${NEWEST} FROM feeds WHERE category_id=? ORDER BY id`, [categoryId])
+      : await db.all<FeedRow>(`SELECT feeds.*, ${NEWEST} FROM feeds ORDER BY id`);
   return rows.map(toFeed);
 }
 
@@ -145,7 +149,9 @@ export async function getFeedRow(db: Db, id: number): Promise<FeedRow> {
 }
 
 export async function getFeed(db: Db, id: number): Promise<Feed> {
-  return toFeed(await getFeedRow(db, id));
+  const row = await db.get<FeedRow & { newest_at: string | null }>(`SELECT feeds.*, ${NEWEST} FROM feeds WHERE id=?`, [id]);
+  if (!row) throw new NotFound(`feed ${id} not found`);
+  return toFeed(row);
 }
 
 export async function listFeedRows(db: Db, enabledOnly = true): Promise<FeedRow[]> {

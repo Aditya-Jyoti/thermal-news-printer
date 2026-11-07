@@ -6,11 +6,11 @@ from tnp.seed import seed_defaults
 def test_seed_idempotent_and_defaults(conn):
     assert [c.slug for c in db.list_categories(conn)] == [
         "products", "engineering", "psychology", "learning"]
-    assert len(db.list_feeds(conn)) == 5
+    assert len(db.list_feeds(conn)) == 11
     assert db.list_schedules(conn)[0].cron == "0 8 * * *"
     assert db.get_settings(conn).max_items_total == 8
     assert seed_defaults(conn) is False
-    assert len(db.list_feeds(conn)) == 5
+    assert len(db.list_feeds(conn)) == 11
 
 
 def test_category_slug_and_cascade(conn):

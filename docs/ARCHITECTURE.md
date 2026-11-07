@@ -72,9 +72,11 @@ All timestamps are ISO-8601 UTC strings.
 | Category (slug) | Feeds |
 |---|---|
 | Products (`products`) | https://hnrss.org/launches, https://techcrunch.com/category/startups/feed/ |
-| Engineering (`engineering`) | https://blog.pragmaticengineer.com/rss/ |
-| Psychology (`psychology`) | http://freakonomics.blogs.nytimes.com/feed/ |
-| Learning (`learning`) | https://feeds.feedburner.com/bigthink/main |
+| Engineering (`engineering`) | https://www.infoq.com/feed/, https://blog.cloudflare.com/rss/, https://github.blog/engineering/feed/, https://newsletter.pragmaticengineer.com/feed |
+| Psychology (`psychology`) | https://www.psypost.org/feed/, https://www.psychologytoday.com/us/front/feed |
+| Learning (`learning`) | https://bigthink.com/feed/, https://www.sciencedaily.com/rss/top/science.xml, https://www.quantamagazine.org/feed/ |
+
+The retired defaults (Freakonomics NYT blog, Big Think feedburner, Pragmatic Engineer blog) are replaced on existing installs by mobile DB migration v4. Mobile also has the setting `max_age_days` (default 3, 1-14).
 
 Default schedule: `0 8 * * *` ("Morning edition"). Default settings: `{"max_items_total": 8, "model": "google/gemma-3-12b-it", "fallback_model": "deepseek/deepseek-v4.1-flash"}`.
 

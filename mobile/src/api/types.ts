@@ -46,6 +46,10 @@ export interface Feed {
   enabled: boolean;
   last_fetched_at: string | null;
   last_error: string | null;
+  /** newest story date of this feed (published, else fetched); null = no stories stored. */
+  newest_at?: string | null;
+  /** newest story is older than 30 days. */
+  stale?: boolean;
 }
 export interface IngestResult {
   feeds_checked: number;
@@ -120,6 +124,8 @@ export interface Schedule {
 
 export interface Settings {
   max_items_total: number;
+  /** Stories older than this many days are never picked (1-14, default 3). */
+  max_age_days: number;
   model: string;
   fallback_model: string | null;
   printer_address: string | null;
@@ -168,6 +174,8 @@ export interface Edition {
   built_at: string | null;
   /** max_items_total from the settings: the size the edition aims for. */
   target: number;
+  /** max_age_days from the settings: how old a story may be. */
+  max_age_days?: number;
 }
 
 /** One story of an archived edition (History). */
@@ -198,11 +206,27 @@ export interface FetchNewsResult {
   edition: Edition;
 }
 
+export interface FeedDiagnostics {
+  id: number;
+  url: string;
+  title: string | null;
+  category_slug: string;
+  enabled: boolean;
+  last_fetched_at: string | null;
+  last_error: string | null;
+  total_items: number;
+  fresh_items: number;
+  newest_at: string | null;
+  stale: boolean;
+}
+
 export interface Diagnostics {
   /** Configuration hints, e.g. a useless fallback model. */
   hints?: string[];
   /** recency window the last edition needed (days); null = unlimited. */
   window_days?: number | null;
+  /** per feed: fetch state and story counts (total and inside the age window). */
+  feeds?: FeedDiagnostics[];
   /** per category: stored articles, unseen ones inside the window, stories in the current edition. */
   categories?: { slug: string; fetched: number; eligible: number; in_edition: number }[];
   last_errors: LastErrors;

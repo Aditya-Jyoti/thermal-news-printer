@@ -1,7 +1,7 @@
-import type { ArticleDetail, ArticleSummary } from '../../api/types';
+import type { ArticleDetail, ArticleSummary, FeedDiagnostics } from '../../api/types';
 import { NotFound } from '../errors';
 import type { Db, SqlValue } from './adapter';
-import { nowIso, toIso } from './time';
+import { isStale, nowIso, toIso } from './time';
 
 export async function fingerprintExists(db: Db, fingerprint: string): Promise<boolean> {
   return (await db.get('SELECT 1 FROM articles WHERE fingerprint=?', [fingerprint])) !== null;
@@ -163,6 +163,7 @@ export async function updateArticleContent(
 
 export interface CandidateRow {
   id: number;
+  feed_id: number;
   title: string;
   category_slug: string;
   content_text: string | null;
@@ -182,12 +183,12 @@ const NOT_CONSUMED =
  */
 export async function listCurationCandidates(
   db: Db,
-  { limit = 80, maxAgeDays = 14, now = new Date() }: { limit?: number; maxAgeDays?: number | null; now?: Date } = {},
+  { limit = 1000, maxAgeDays = 14, now = new Date() }: { limit?: number; maxAgeDays?: number | null; now?: Date } = {},
 ): Promise<CandidateRow[]> {
   // maxAgeDays null = no recency limit.
   const cutoff = maxAgeDays === null ? '0000-01-01T00:00:00.000Z' : toIso(new Date(now.getTime() - maxAgeDays * 86_400_000));
   return db.all<CandidateRow>(
-    'SELECT a.id, a.title, c.slug AS category_slug, a.content_text, a.published_at, a.fetched_at ' +
+    'SELECT a.id, a.feed_id, a.title, c.slug AS category_slug, a.content_text, a.published_at, a.fetched_at ' +
       'FROM articles a JOIN feeds f ON f.id=a.feed_id JOIN categories c ON c.id=f.category_id ' +
       'WHERE (a.is_political IS NULL OR a.is_political=0) AND c.print_limit > 0 AND f.enabled=1 ' +
       'AND COALESCE(a.published_at, a.fetched_at) >= ? ' +
@@ -282,4 +283,37 @@ export async function countByCategory(
       'GROUP BY c.id ORDER BY c.id',
     [cutoff],
   );
+}
+
+/** Per-feed fetch state and story counts (total, and inside the age window) for Diagnostics. */
+export async function feedDiagnostics(
+  db: Db,
+  { maxAgeDays = 3, now = new Date() }: { maxAgeDays?: number; now?: Date } = {},
+): Promise<FeedDiagnostics[]> {
+  const cutoff = toIso(new Date(now.getTime() - maxAgeDays * 86_400_000));
+  const rows = await db.all<{
+    id: number; url: string; title: string | null; slug: string; enabled: number;
+    last_fetched_at: string | null; last_error: string | null; total: number; fresh: number; newest: string | null;
+  }>(
+    'SELECT f.id, f.url, f.title, c.slug, f.enabled, f.last_fetched_at, f.last_error, ' +
+      'COUNT(a.id) AS total, ' +
+      'COALESCE(SUM(CASE WHEN COALESCE(a.published_at, a.fetched_at) >= ? THEN 1 ELSE 0 END), 0) AS fresh, ' +
+      'MAX(COALESCE(a.published_at, a.fetched_at)) AS newest ' +
+      'FROM feeds f JOIN categories c ON c.id=f.category_id LEFT JOIN articles a ON a.feed_id=f.id ' +
+      'GROUP BY f.id ORDER BY c.id, f.id',
+    [cutoff],
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    url: r.url,
+    title: r.title,
+    category_slug: r.slug,
+    enabled: r.enabled !== 0,
+    last_fetched_at: r.last_fetched_at,
+    last_error: r.last_error,
+    total_items: r.total,
+    fresh_items: r.fresh,
+    newest_at: r.newest,
+    stale: isStale(r.newest, now),
+  }));
 }

@@ -27,8 +27,12 @@ Everything runs **on your Android phone**. You don't need a server.
 
 ### 1. Collecting the news
 - You manage **categories** (e.g. `#products`, `#engineering`) and the **RSS feeds** in each one from the app.
-  Defaults: Hacker News Launches and TechCrunch Startups (products), The Pragmatic Engineer (engineering),
-  Freakonomics (psychology), Big Think (learning).
+  Defaults: Hacker News Launches and TechCrunch Startups (products); InfoQ, Cloudflare, GitHub Engineering and
+  The Pragmatic Engineer newsletter (engineering); PsyPost and Psychology Today (psychology); Big Think,
+  ScienceDaily and Quanta (learning). Existing installs get the old dead defaults swapped automatically.
+- All enabled feeds are fetched in parallel on "Fetch new news"; a failing feed never blocks the others.
+  Settings > Diagnostics lists every feed (last fetch, error, total and fresh items) and Sources flags feeds whose
+  newest story is over 30 days old as stale.
 - Feeds are fetched with conditional requests (ETag / Last-Modified), so unchanged feeds cost almost nothing.
 - Every article gets a **fingerprint**, a hash of its normalised URL with tracking parameters, fragments and
   trailing slashes stripped. The same story arriving through two feeds is stored once.
@@ -37,12 +41,15 @@ Everything runs **on your Android phone**. You don't need a server.
   interesting, substantive stories: launches, research findings, engineering deep dives, big non-political news.
   It skips listicles, promos and near-duplicates. The same call flags political stories.
 - The code then applies the rules to the AI's ranking:
-  - **The edition always has exactly "max items" stories** (Settings) whenever enough unseen, non-political
-    stories exist. The **per-category limits** you set (e.g. max 3 `#products`, max 1 `#psychology`) are
-    *preferences*: the AI's picks are taken within them first, then remaining picks, then the newest other
-    stories round-robin across categories to fill the count. A limit of 0 (and disabled feeds) always excludes.
-  - If the last 14 days cannot fill the edition, the window widens (30, 90 days, then no limit). Only when every
-    unseen story is exhausted is the edition smaller, and the Feed says exactly why.
+  - **Freshness:** only stories from the last **Max story age** days (Settings, default 3, up to 14) are
+    considered. The window never widens: if it cannot fill the target the edition is smaller and the Feed says
+    "Only N fresh stories in the last 3 days".
+  - **Diversity:** the AI is shown up to 25 newest candidates from *every* category (feeds alternating), so one
+    busy feed cannot swamp the rest. Then (A) every category with fresh stories gets its best story first,
+    (B) the rest follows the AI order within your **per-category limits** (max 3 `#products`, max 1
+    `#psychology`), (C) any gap is filled ignoring those limits. Inside a category feeds alternate and no single
+    feed takes more than a third of the edition unless nothing else is left. The printed receipt interleaves
+    categories. A limit of 0 (and disabled feeds) always excludes.
   - **It never prints the same news twice.** Anything that appeared in a successful (or in-progress) print is
     excluded. Headlines that are near-duplicates (word overlap ≥ 80%) of the last print, or of each other, are
     skipped too. If a print *fails*, those stories become eligible again, because they never reached paper.

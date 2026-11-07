@@ -56,6 +56,7 @@ export default function FeedScreen() {
 
   const items = useMemo(() => edition.data?.items ?? [], [edition.data]);
   const target = edition.data?.target ?? items.length;
+  const maxAge = edition.data?.max_age_days ?? 3;
   const unread = useMemo(() => items.filter((i) => i.read_at === null).length, [items]);
   const status = edition.data?.status;
   const busyText = status ? progressText(status) : null;
@@ -102,13 +103,13 @@ export default function FeedScreen() {
           </Text>
           {short ? (
             <Text variant="bodySmall" style={{ color: theme.colors.onSurfaceVariant }}>
-              Only {items.length} unseen {items.length === 1 ? 'story' : 'stories'} left across your feeds — add feeds or wait for new posts
+              Only {items.length} fresh {items.length === 1 ? 'story' : 'stories'} in the last {maxAge} {maxAge === 1 ? 'day' : 'days'}. Raise Max story age in Settings or add feeds.
             </Text>
           ) : null}
         </View>
       </View>
     );
-  }, [fetchNews.isPending, onFetchNew, status, items.length, target, unread, theme.colors.onSurfaceVariant]);
+  }, [fetchNews.isPending, onFetchNew, status, items.length, target, maxAge, unread, theme.colors.onSurfaceVariant]);
 
   if (edition.isLoading) return <LoadingView />;
   if (edition.isError) return <ErrorView error={edition.error} onRetry={() => edition.refetch()} />;

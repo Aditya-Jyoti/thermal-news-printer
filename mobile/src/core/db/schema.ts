@@ -1,4 +1,8 @@
+import { DEFAULT_CATEGORIES, RETIRED_DEFAULTS } from '../seed';
 import type { Db } from './adapter';
+import { createFeed } from './catalog';
+
+export type Migration = string | ((db: Db) => Promise<void>);
 
 /** Migration v1: schema identical to docs/ARCHITECTURE.md. */
 const V1 = `
@@ -75,15 +79,48 @@ INSERT INTO edition_archive_items(edition_id, position, article_id, category_slu
   FROM print_items pi JOIN prints p ON p.id=pi.print_id WHERE p.status='printed';
 `;
 
+/**
+ * Migration v4: replace the retired default feeds (dead Freakonomics / Big Think, slow Pragmatic Engineer blog)
+ * in place with the first new default of the same category, then add that category's other new defaults.
+ * Only touches default categories (by slug) and only where a retired feed is still present: feeds the user
+ * deleted stay deleted, user-added feeds are never modified. Idempotent.
+ */
+export async function migrateDefaultFeeds(db: Db): Promise<void> {
+  const slugOf = (name: string) => name.toLowerCase();
+  for (const [oldUrl, slug] of Object.entries(RETIRED_DEFAULTS)) {
+    const old = await db.get<{ id: number; category_id: number }>(
+      'SELECT f.id, f.category_id FROM feeds f JOIN categories c ON c.id=f.category_id WHERE f.url=? AND c.slug=?',
+      [oldUrl, slug],
+    );
+    if (!old) continue;
+    const urls = Object.entries(DEFAULT_CATEGORIES).find(([n]) => slugOf(n) === slug)?.[1] ?? [];
+    if (urls.length === 0) continue;
+    const [first, ...others] = urls;
+    if (await db.get('SELECT 1 FROM feeds WHERE url=?', [first])) {
+      await db.run('DELETE FROM feeds WHERE id=?', [old.id]); // the replacement already exists
+    } else {
+      await db.run(
+        'UPDATE feeds SET url=?, title=NULL, etag=NULL, last_modified=NULL, last_fetched_at=NULL, last_error=NULL WHERE id=?',
+        [first, old.id],
+      );
+    }
+    for (const url of others) {
+      if (!(await db.get('SELECT 1 FROM feeds WHERE url=?', [url]))) await createFeed(db, url, old.category_id);
+    }
+  }
+}
+
 /** Append new migrations; index + 1 is the resulting PRAGMA user_version. */
-export const MIGRATIONS: string[] = [V1, V2, V3];
+export const MIGRATIONS: Migration[] = [V1, V2, V3, migrateDefaultFeeds];
 
 export async function migrate(db: Db): Promise<void> {
   await db.exec('PRAGMA foreign_keys=ON');
   const row = await db.get<{ user_version: number }>('PRAGMA user_version');
   const current = row?.user_version ?? 0;
   for (let v = current; v < MIGRATIONS.length; v++) {
-    await db.exec(MIGRATIONS[v]);
+    const m = MIGRATIONS[v];
+    if (typeof m === 'string') await db.exec(m);
+    else await m(db);
     await db.exec(`PRAGMA user_version=${v + 1}`);
   }
 }

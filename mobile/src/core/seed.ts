@@ -4,9 +4,20 @@ import { createSchedule, getSetting, listSchedules, setSetting } from './db/sett
 
 export const DEFAULT_CATEGORIES: Record<string, string[]> = {
   Products: ['https://hnrss.org/launches', 'https://techcrunch.com/category/startups/feed/'],
-  Engineering: ['https://blog.pragmaticengineer.com/rss/'],
-  Psychology: ['http://freakonomics.blogs.nytimes.com/feed/'],
-  Learning: ['https://feeds.feedburner.com/bigthink/main'],
+  Engineering: [
+    'https://www.infoq.com/feed/',
+    'https://blog.cloudflare.com/rss/',
+    'https://github.blog/engineering/feed/',
+    'https://newsletter.pragmaticengineer.com/feed',
+  ],
+  Psychology: ['https://www.psypost.org/feed/', 'https://www.psychologytoday.com/us/front/feed'],
+  Learning: ['https://bigthink.com/feed/', 'https://www.sciencedaily.com/rss/top/science.xml', 'https://www.quantamagazine.org/feed/'],
+};
+/** Retired defaults (dead or near-dead feeds) -> the category slug they were seeded into. */
+export const RETIRED_DEFAULTS: Record<string, string> = {
+  'http://freakonomics.blogs.nytimes.com/feed/': 'psychology',
+  'https://feeds.feedburner.com/bigthink/main': 'learning',
+  'https://blog.pragmaticengineer.com/rss/': 'engineering',
 };
 export const DEFAULT_SCHEDULE = { cron: '0 8 * * *', label: 'Morning edition' };
 export const SEED_SETTINGS = {
