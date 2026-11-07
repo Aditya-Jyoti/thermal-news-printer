@@ -1,4 +1,5 @@
-import { PROFILES, type DarknessLevel, type PrintProfile } from './protocol';
+import type { ReceiptBitmap } from '../device/contracts';
+import { PROFILES, encodeBitmap, type DarknessLevel, type PrintProfile } from './protocol';
 
 export type { DarknessLevel } from './protocol';
 type Store = Pick<typeof import('@react-native-async-storage/async-storage').default, 'getItem' | 'setItem'>;
@@ -17,8 +18,12 @@ export const isDarkness = (v: unknown): v is DarknessLevel => DARKNESS_LEVELS.in
 export async function getDarkness(): Promise<DarknessLevel> {
   try {
     const v = await storage().getItem(DARKNESS_KEY);
-    return isDarkness(v) ? v : DEFAULT_DARKNESS;
-  } catch {
+    if (v == null) return DEFAULT_DARKNESS;
+    if (isDarkness(v)) return v;
+    console.warn(`[tnp] ignoring invalid saved darkness ${JSON.stringify(v)}, using ${DEFAULT_DARKNESS}`);
+    return DEFAULT_DARKNESS;
+  } catch (e) {
+    console.warn(`[tnp] could not read saved darkness (${e instanceof Error ? e.message : String(e)}), using ${DEFAULT_DARKNESS}`);
     return DEFAULT_DARKNESS;
   }
 }
@@ -32,3 +37,17 @@ export async function setDarkness(level: DarknessLevel): Promise<void> {
 }
 
 export const profileFor = (level: DarknessLevel): PrintProfile => PROFILES[level];
+
+/** Resolve the level (override, else saved), encode the job with its profile and log what is used. */
+export async function buildJob(
+  bitmap: ReceiptBitmap,
+  override?: DarknessLevel,
+): Promise<{ level: DarknessLevel; profile: PrintProfile; data: Uint8Array }> {
+  const level = override ?? (await getDarkness());
+  const profile = profileFor(level);
+  const data = encodeBitmap(bitmap, { profile });
+  console.warn(
+    `[tnp] print level=${level} energy=0x${profile.energy.toString(16)} speed=${profile.speed} rows=${bitmap.height} bytes=${data.length}`,
+  );
+  return { level, profile, data };
+}
