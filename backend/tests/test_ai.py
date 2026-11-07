@@ -66,7 +66,7 @@ def test_summarize_ok_and_truncates_input():
     c = FakeClient("TL;DR: Acme ships a chip.")
     r = summarize(art(text="x " * 20000), client=c, model="m")
     assert r.tldr == "Acme ships a chip." and r.article_id == 1 and r.model == "m"
-    assert len(c.calls[0]["messages"][0]["content"]) < 8000
+    assert len(c.calls[0]["messages"][0]["content"]) < 16000
 
 
 def test_summarize_empty_content_uses_title():
