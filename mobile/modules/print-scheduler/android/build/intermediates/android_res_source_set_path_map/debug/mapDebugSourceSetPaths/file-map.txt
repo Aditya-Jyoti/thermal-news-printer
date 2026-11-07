@@ -1,9 +1,0 @@
-expo.modules.printscheduler.print-scheduler-pngs-0 /home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/build/generated/res/pngs/debug
-expo.modules.printscheduler.print-scheduler-updated_navigation_xml-1 /home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/build/generated/updated_navigation_xml/debug
-expo.modules.printscheduler.print-scheduler-mergeDebugResources-2 /home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
-expo.modules.printscheduler.print-scheduler-mergeDebugResources-3 /home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
-expo.modules.printscheduler.print-scheduler-debug-4 /home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/build/intermediates/merged_res/debug/mergeDebugResources
-expo.modules.printscheduler.print-scheduler-debug-5 /home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/build/intermediates/packaged_res/debug/packageDebugResources
-expo.modules.printscheduler.print-scheduler-debug-6 /home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/debug/res
-expo.modules.printscheduler.print-scheduler-main-7 /home/aditya/Programming/Projects/thermal-news-printer/.claude/worktrees/agent-a20a83c4121c57861/mobile/modules/print-scheduler/android/src/main/res
-gradleHome-0 /home/aditya/.gradle

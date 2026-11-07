@@ -10,3 +10,15 @@ node_modules/
 mobile/android/
 mobile/ios/
 .claude/worktrees/
+
+# Build outputs (never commit)
+**/build/
+**/.gradle/
+**/.cxx/
+**/.kotlin/
+*.apk
+*.aab
+mobile/dist/
+mobile/render-out/
+mobile/screens/
+*.log
