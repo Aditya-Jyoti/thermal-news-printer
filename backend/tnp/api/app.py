@@ -1,6 +1,7 @@
 """FastAPI application implementing the REST contract in docs/ARCHITECTURE.md."""
 from __future__ import annotations
 
+import io
 import os
 import sqlite3
 from contextlib import asynccontextmanager
@@ -253,12 +254,38 @@ def create_app(db_path: str | None = None) -> FastAPI:
         return process_pending(conn, limit=limit)
 
     @app.get("/print/preview.png")
-    def print_preview() -> Response:
-        raise HTTPException(501, "print preview not implemented yet")
+    def print_preview(print_id: int | None = None, conn: sqlite3.Connection = Conn) -> Response:
+        from tnp import print as printing
+
+        if print_id is not None:
+            record = db.get_print(conn, print_id)  # 404 if unknown
+            stored = printing.print_png_path(conn, print_id)
+            if stored.exists():
+                return Response(stored.read_bytes(), media_type="image/png")
+            items = [
+                DigestItem(article_id=i.article_id or 0, position=i.position,
+                           category_slug=i.category_slug, tldr=i.tldr)
+                for i in record.items
+            ]
+            img = printing.render_items(items, issue_no=print_id, seed=print_id)
+        else:
+            img = printing.render_items(build_digest(conn))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        return Response(buf.getvalue(), media_type="image/png")
 
     @app.post("/print", response_model=PrintRecord)
-    def print_now() -> PrintRecord:
-        raise HTTPException(501, "printing not implemented yet")
+    def print_now(conn: sqlite3.Connection = Conn) -> PrintRecord:
+        from tnp import print as printing
+
+        digest = build_digest(conn)
+        if not digest:
+            raise HTTPException(409, "Nothing new to print")
+        record = printing.deliver(conn, digest, "manual")
+        if record is not None and record.status == "failed":
+            raise HTTPException(502, f"print {record.id} failed: {record.error}")
+        assert record is not None
+        return record
 
     return app
 

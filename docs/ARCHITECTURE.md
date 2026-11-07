@@ -34,6 +34,7 @@ and must NOT import `tnp.db`. The Orchestrator wires B into A's DB and API after
 | `TNP_FALLBACK_MODEL` | `deepseek/deepseek-v4.1-flash` | used when the primary model errors |
 | `TNP_DB_PATH` | `./data/tnp.sqlite3` | |
 | `TNP_API_HOST` / `TNP_API_PORT` | `0.0.0.0` / `8000` | |
+| `TNP_PRINTER` | `ble` | `ble` = real BLE printer; `dry` = render + mark printed without hardware; `off` = render + save, mark failed ("printer disabled") |
 
 ## SQLite schema (Stream A implements in `tnp/db.py`)
 
@@ -113,7 +114,7 @@ Base URL configurable in the app (default `http://<lan-ip>:8000`). JSON everywhe
 | `PATCH /settings` | partial `Settings` | `Settings` |
 | `GET /digest/preview` | | `DigestItem[]` — next print batch (limits, dedup vs. printed) |
 | `POST /ai/process` | `?limit=40` | `{summarized, flagged_political, failed, skipped_no_key}` — summarize pending articles now |
-| `GET /print/preview.png` | | `image/png`, 384px wide (Phase 3/5; A returns 501) |
-| `POST /print` | | `PrintRecord` (Phase 3/5; A returns 501) |
+| `GET /print/preview.png` | `?print_id=` optional | `image/png`, 1-bit, 384px wide: the next digest (empty digest renders a "No new stories" receipt), or the stored/re-rendered image of a past print |
+| `POST /print` | | `PrintRecord` (builds the digest, renders, prints over BLE). 409 `Nothing new to print` when the digest is empty; 502 (`print <id> failed: ...`) when printing fails (the failed print is still recorded) |
 
 Errors: `{"detail": "<message>"}` with 4xx/5xx. CORS: allow all origins.
