@@ -67,7 +67,7 @@ You are a testing QA sub-agent powered by Claude Haiku. Your job is to write tes
 * Image Dimensions: The generated image must be exactly 384px wide (approx. 48mm / 203 dpi). Length is dynamic based on content.
 * Visual Constraints: 1-bit monochrome (Black & White).
 * Aesthetics (Newspaper Style): Do NOT print titles. The print should strictly be a general TL;DR of the article itself. Tags should be plain text prefixed with a hash (e.g., #products, #engineering), no filled capsules or background pills. Use newspaper-like typography (serif fonts, clean columns/dividers). 
-* Animations: Since paper is static, simulate animation by rendering a sequence of small sprites down the margin (like a small comic or a character reacting to the news) as the user unrolls the print.
+* No Characters or Sprites: The print is text only. Do NOT add characters, sprites, margin animations or decorative illustrations; they waste print space. Use the full 384px width for text.
 
 ## React Native App Constraints (Frontend & Control Center)
 * Purpose: To read full-length articles, view past news, and control the thermal printer backend.
@@ -83,7 +83,7 @@ You are a testing QA sub-agent powered by Claude Haiku. Your job is to write tes
 ## Execution Plan
 1. Phase 1: Agent & Repo Setup: Opus creates the .claude/agents/ files and initializes the git repo according to the Git rules.
 2. Phase 2: RSS & AI Backend: Delegate to sonnet-worker to build the Python backend that fetches the dynamically configured RSS feeds, handles deduplication, filters politics, and uses OpenRouter for lightweight TL;DR generation. haiku-tester writes tests.
-3. Phase 3: Thermal Print Generator: Delegate to sonnet-worker to build the 384px Pillow (Python) canvas using newspaper styling, inject the typography/margin sprites, apply dithering, and link the BLE print protocol.
+3. Phase 3: Thermal Print Generator: Delegate to sonnet-worker to build the 384px Pillow (Python) canvas using newspaper styling, apply the newspaper typography (text only, crisp 1-bit), and link the BLE print protocol.
 4. Phase 4: Mobile App & Configurator: Delegate to sonnet-worker to scaffold the React Native app, implement Material You theming, the card feed, the History section, Source/Category management, and the Configuration settings (print limits, schedule).
 5. Phase 5: Print Preview & Integration: Tie the digital app and physical print backend together, ensuring the Print Preview pane accurately reflects the Pillow output and app settings dictate the backend cron jobs and feed sources.
 
