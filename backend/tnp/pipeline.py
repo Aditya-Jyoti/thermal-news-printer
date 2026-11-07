@@ -18,6 +18,7 @@ from tnp import db
 from tnp.ai import AIError, AIUnavailable, make_client, summarize, summarize_and_classify
 from tnp.config import load_config
 from tnp.digest import select_digest
+from tnp.ingest.enrich import enrich_rows
 from tnp.ingest.service import run_ingest
 from tnp.models import (
     ArticleForAI,
@@ -89,8 +90,12 @@ def process_pending(
     cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
     # Over-fetch so old rows filtered out by age don't starve the batch.
     rows = [r for r in db.list_articles_needing_summary(conn, limit * 5 + 50) if _is_recent(r, cutoff)]
-    for row in rows[:limit]:
+    batch = rows[:limit]
+    enriched = enrich_rows(conn, batch)
+    for row in batch:
         art = article_for_ai(row)
+        if row["id"] in enriched:
+            art = art.model_copy(update={"content_text": enriched[row["id"]]})
         try:
             if row["is_political"] is None:
                 summary, verdict = summarize_and_classify(

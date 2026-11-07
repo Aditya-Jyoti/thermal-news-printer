@@ -391,6 +391,17 @@ def set_political(conn: sqlite3.Connection, article_id: int, is_political: bool)
     conn.commit()
 
 
+def update_article_content(
+    conn: sqlite3.Connection, article_id: int, content_text: str, content_html: str | None = None
+) -> None:
+    """Replace an article's body (full-text enrichment); keeps the old HTML if none is given."""
+    conn.execute(
+        "UPDATE articles SET content_text=?, content_html=COALESCE(?, content_html) WHERE id=?",
+        (content_text, content_html, article_id),
+    )
+    conn.commit()
+
+
 def list_articles_needing_summary(conn: sqlite3.Connection, limit: int = 50) -> list[sqlite3.Row]:
     """Non-political articles without a summary; rows are articles.* plus category_slug."""
     return list(conn.execute(
