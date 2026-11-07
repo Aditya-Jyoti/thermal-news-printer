@@ -2,25 +2,27 @@
 
 **Your daily news, printed on a cheap Bluetooth thermal "cat printer" and kept in an app.**
 
-Every morning the app collects stories from your RSS feeds, has a small AI model write a short,
-concrete TL;DR for each one, and prints them as a little newspaper receipt, "The Thermal Times".
-The full articles stay in the app, so you can read anything that caught your eye later.
+Every morning the app collects stories from your RSS feeds, lets a small AI model pick the most interesting
+ones, writes a short, concrete TL;DR for each, and prints them as a little newspaper receipt, "The Thermal Times".
+The app shows exactly that edition, and tapping a story opens the original article, so you can read anything that
+caught your eye later.
 
 <p align="center"><img src="docs/sample_receipt.png" width="300" alt="Sample receipt: The Thermal Times"></p>
 
 Everything runs **on your Android phone**. You don't need a server.
 
-> **Status:** active development. The phone-only version (Phase 6) is being built: on-device
-> fetching, summaries, rendering and Bluetooth printing. The Python implementation in `backend/` works
-> end to end today and is the reference the app is ported from. See [Status](#status).
+> **Status:** active development. The phone-only app (Phase 6) runs on the phone today. Real-world testing of
+> on-phone Bluetooth printing and scheduled prints is in progress. The Python implementation in `backend/` is the
+> reference the app was ported from. See [Status](#status).
 
 ---
 
 ## How it works
 
 ```
- RSS feeds ──► fetch & dedupe ──► full text ──► AI TL;DR ──► pick today's stories ──► render 384px ──► Bluetooth ──► 🧾
- (per category)  (SQLite)        (if teaser)   (OpenRouter)  (limits, never repeat)   1-bit receipt    cat printer
+ RSS feeds ──► fetch & dedupe ──► AI picks the edition ──► full text + AI TL;DR ──► render 384px ──► Bluetooth ──► 🧾
+ (per category)  (SQLite)        (1 call, limits,          (only the chosen          1-bit receipt    cat printer
+                                  never repeat)             stories)
 ```
 
 ### 1. Collecting the news
@@ -30,27 +32,33 @@ Everything runs **on your Android phone**. You don't need a server.
 - Feeds are fetched with conditional requests (ETag / Last-Modified), so unchanged feeds cost almost nothing.
 - Every article gets a **fingerprint**, a hash of its normalised URL with tracking parameters, fragments and
   trailing slashes stripped. The same story arriving through two feeds is stored once.
-- Some feeds only ship a one-line teaser. TechCrunch's RSS averages about 170 characters. For those, the app
-  downloads the article page and extracts the main text (Readability), which typically means about 3,000+ characters.
-  The AI then has the real story to work with, and you get the full article in the app.
+### 2. Picking the edition with AI
+- **One AI call** looks at the recent, never-printed candidates (title plus a short snippet) and ranks the most
+  interesting, substantive stories: launches, research findings, engineering deep dives, big non-political news.
+  It skips listicles, promos and near-duplicates. The same call flags political stories.
+- The code then applies the hard rules to the AI's ranking:
+  - The **per-category limits** you set (e.g. max 3 `#products`, max 1 `#psychology`), plus an overall cap.
+  - **It never prints the same news twice.** Anything that appeared in a successful (or in-progress) print is
+    excluded. Headlines that are near-duplicates (word overlap ≥ 80%) of the last print, or of each other, are
+    skipped too. If a print *fails*, those stories become eligible again, because they never reached paper.
+- The result is the **next edition**. It is saved, and the **Feed**, the **Print Preview** and the printer all
+  use exactly this edition. The app never shows the raw RSS firehose.
+- Without an API key, or if the call fails, the app falls back to a deterministic pick: newest first, categories interleaved.
 
-### 2. Summarising with AI
+### 3. Summarising with AI
 - Summaries use [OpenRouter](https://openrouter.ai) through the OpenAI-compatible API.
   The default model is `google/gemma-3-12b-it`, with an automatic fallback to `deepseek/deepseek-v4.1-flash`.
   You can switch either model, or type any OpenRouter model id, in Settings.
-- Each new article costs **one call**. That call writes the TL;DR and also decides whether the story is political.
-- **Strictly non-political.** A keyword pre-filter catches obvious cases cheaply and the AI decides the rest.
-  Political stories are never printed and are hidden from the feed.
+- **Only the chosen stories are summarised**: about 8 calls per edition, not one per article. That keeps it fast,
+  cheap and light on battery.
+- Some feeds only ship a one-line teaser. TechCrunch's RSS averages about 170 characters. For chosen stories like
+  that, the app downloads the article page and extracts the main text (Readability), typically 3,000+ characters,
+  so the AI has the real story to work with.
+- **Strictly non-political.** A keyword pre-filter catches obvious cases cheaply and the curation call decides the
+  rest. Political stories are never printed or shown.
 - The prompt asks for 2–3 sentences of about 45–70 words that **name the concrete subject** (the headline
   isn't printed), give the key specifics (numbers, names, how it works) and say why it matters. Filler like
   "explores", "discusses" and "sheds light" is banned, and a weak answer is retried once.
-
-### 3. Choosing what to print
-- The **per-category limits** you set apply (e.g. max 3 `#products`, max 1 `#psychology`), plus an overall cap.
-  Categories are interleaved so the print stays varied, and the newest stories come first.
-- **It never prints the same news twice.** Anything that appeared in a successful (or in-progress) print is
-  excluded. Headlines that are near-duplicates (word overlap ≥ 80%) of the last print, or of each other, are
-  skipped too. If a print *fails*, those stories become eligible again, because they never reached paper.
 
 ### 4. Rendering the receipt
 - A canvas exactly **384 px wide** (48 mm at 203 dpi), as long as the content needs, **1-bit black and white**.
@@ -119,11 +127,11 @@ React Native (Expo, TypeScript) with **Material You** theming that takes its col
 
 | Tab | What it does |
 |---|---|
-| **Feed** | Cards with image, title and category tag; pull to refresh; tap for the full article and its TL;DR |
-| **Preview** | The exact 384px receipt that would print right now |
+| **Feed** | The next edition (exactly what will print), then past printed editions. Cards show image, title and category tag; tap opens the original article in an in-app browser; pull to refresh |
+| **Preview** | The exact 384px receipt for the next edition |
 | **History** | Every past print and its stories, so nothing is lost if you didn't read the paper |
 | **Sources** | Add, edit and remove feeds and categories, and set per-category print limits |
-| **Settings** | Print times, models, OpenRouter key, printer pairing and test print, Print now, data source |
+| **Settings** | Print times and scheduled-printing status, models, OpenRouter key, printer pairing and test print, Print now, data source |
 
 **Data source** (Settings): *On-device* (default, no server), *Remote backend* (point the app at the Python
 backend, e.g. on a Raspberry Pi), or *Demo* (sample data).
@@ -132,27 +140,87 @@ backend, e.g. on a Raspberry Pi), or *Demo* (sample data).
 
 ## Getting started
 
-### Requirements
-- An Android phone (Android 12+ for wallpaper colours) and a BLE cat printer (tested with **SC03h**).
-- An [OpenRouter API key](https://openrouter.ai/keys). Summaries cost a fraction of a cent per day with the default model.
-- To build: Node.js, JDK 17 and the Android SDK.
+### Tech stack and versions
 
-### Build and install the app
+| Part | Version |
+|---|---|
+| Expo SDK | 58 (`expo ~58.0.23`, `expo-router ~58.0.30`) |
+| React Native / React | 0.88.1 / 19.3.0 (Hermes, New Architecture) |
+| TypeScript | ~6.0.3 (strict) |
+| UI | `react-native-paper` ^5.15 (Material 3) + `@pchmn/expo-material3-theme` ^1.4 (wallpaper colours) |
+| Data | `expo-sqlite` ~58.0, `@tanstack/react-query` ^5.107, `expo-secure-store` ~58.0 |
+| Feeds and full text | `fast-xml-parser` ^5.12, `@mozilla/readability` ^0.6, `linkedom` ^0.18 |
+| Receipt rendering | `@shopify/react-native-skia` 2.14.0 |
+| Bluetooth | `react-native-ble-plx` ^3.5 |
+| Scheduling | local Expo module `modules/print-scheduler` (Kotlin, AlarmManager + foreground service) |
+| Android | minSdk 24 · targetSdk 36 · compileSdk 37 · build-tools 37.0.0 · NDK 27.1.12297006 · Kotlin 2.2 · Gradle 9.4.1 |
+| Python reference backend | Python ≥ 3.12 (tested on 3.14), managed by `uv` |
+
+### Requirements
+- An Android phone (Android 12+ for wallpaper colours; Android 16 tested) and a BLE cat printer (tested with **SC03h**).
+- An [OpenRouter API key](https://openrouter.ai/keys). An edition costs well under a cent with the default model.
+- To build:
+  - Node.js 20+ (tested on 26) and npm.
+  - **JDK 17**.
+  - The Android SDK with platform 37, build-tools 37.0.0 and NDK 27.1.12297006. Android Studio installs these, or
+    use `sdkmanager`.
+  - Set `ANDROID_HOME`, e.g. `export ANDROID_HOME=$HOME/Android/Sdk`.
+  - `adb` and a phone with **USB debugging** on (Developer options).
+- Expo Go **won't** work, because Material You colours, Bluetooth, Skia and the alarm scheduler are native modules.
+  You build your own APK.
+
+### Build an APK
+
 ```bash
-cd mobile
+git clone <this repo> && cd thermal-news-printer/mobile
 npm install
-npx expo prebuild --platform android
-cd android && ./gradlew assembleDebug        # first build takes ~10 minutes
-adb install -r app/build/outputs/apk/debug/app-debug.apk
+npx expo prebuild --platform android --clean      # generates android/ (gitignored)
+cd android
 ```
-For development with live reload, run `npx expo start --dev-client` in `mobile/` and `adb reverse tcp:8081 tcp:8081`.
-Expo Go won't work, because Material You colours and Bluetooth need native modules.
+
+**Release build (recommended for daily use).** The JavaScript is bundled and compiled to Hermes bytecode, so it is
+fast and needs no computer once installed:
+```bash
+./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
+adb install -r app/build/outputs/apk/release/app-release.apk
+```
+The generated project signs release builds with the debug keystore, which is fine for installing on your own phone.
+To publish, create your own keystore and set `signingConfigs.release` in `android/app/build.gradle`, or use EAS Build.
+
+**Debug build (development, live reload).** It loads its JavaScript from the Metro dev server on your computer.
+It is noticeably slower than a release build and needs the USB cable:
+```bash
+./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+cd .. && npx expo start --dev-client               # Metro
+adb reverse tcp:8081 tcp:8081                     # phone reaches Metro over USB
+```
+Or let Expo do build, install and launch in one step: `npx expo run:android --variant release` (or without `--variant` for debug).
+
+Build notes:
+- `-PreactNativeArchitectures=arm64-v8a` builds only for 64-bit ARM phones, which covers nearly every phone from the
+  last few years. That makes the build about 4× faster and the APK much smaller. Omit it for a universal APK.
+- The first build takes about 5–10 minutes. Later builds are much faster.
+- After adding or upgrading a **native** dependency, or changing `app.json` plugins or `modules/`, run
+  `npx expo prebuild --platform android --clean` again and rebuild. Pure JavaScript changes only need Metro (debug)
+  or a rebuild (release).
+- Checks: `npx tsc --noEmit`, `npx expo lint`, `npx jest`, `npx expo-doctor`.
+
+Troubleshooting:
+- **`INSTALL_FAILED_VERIFICATION_FAILURE` or the install hangs (OnePlus/Oppo/Xiaomi):** enable *Install via USB*
+  in Developer options, and accept the confirmation prompt on the phone.
+- **`INSTALL_FAILED_UPDATE_INCOMPATIBLE`** when switching between debug and release: the signatures differ, so run
+  `adb uninstall com.termalnewsprinter.app` first. This deletes the app's data.
+- **App stuck on the splash screen (debug build):** Metro isn't reachable. Check that `npx expo start` is running
+  and re-run `adb reverse tcp:8081 tcp:8081`.
 
 ### First run
 1. **Settings → OpenRouter API key:** paste your key. It is stored in the phone's secure storage, never in the database or logs.
-2. **Settings → Printer → Scan:** pick your printer, then **Print test page**.
-3. Pull to refresh on **Feed**. Summaries appear within a minute.
+2. **Settings → Printer → Scan:** turn the printer on, pick it (e.g. `SC03h-…`), allow *Nearby devices*, then
+   **Print test page**.
+3. **Feed:** pull to refresh. The AI picks the next edition and its summaries appear within a minute.
 4. Check **Preview**, then **Print now**, or wait for your scheduled time.
+5. **Settings → Print schedule:** fix any warnings (exact alarms, notifications, battery) and try **Run schedule now (test)**.
 
 ### Optional: the Python backend
 The original implementation still works on any Linux machine with Bluetooth (including a Raspberry Pi):
@@ -174,11 +242,13 @@ Set `TNP_PRINTER=dry` to run everything without a printer. Run `uv run pytest -q
 ## Repository layout
 ```
 mobile/                 React Native app (Expo)
-  src/core/             on-device pipeline: SQLite, RSS, full text, OpenRouter, digest
+  src/core/             on-device pipeline: SQLite, RSS, AI curation, full text, OpenRouter, edition
   src/render/           384px receipt renderer (Skia)
   src/printer/          cat-printer BLE protocol + driver
+  src/scheduler/        cron, alarm re-arming, background print task
   src/api/              data layer (on-device, remote backend, demo)
   src/app/              screens (expo-router)
+  modules/print-scheduler/  native Kotlin module: exact alarms, foreground service, boot receiver
 backend/                Python reference implementation (FastAPI, Pillow, BLE)
 docs/
   ARCHITECTURE.md       data model, dedup rules, REST API
@@ -187,10 +257,13 @@ docs/
 ```
 
 ## Status
-- ✅ Python backend: ingest, enrichment, AI summaries with fallback, dedup, 384px renderer, BLE printing
-  (connects and streams to the SC03h), REST API, scheduler, 359 tests.
-- ✅ App screens, Material You theming, demo and remote-backend modes; runs on device.
-- 🚧 Phase 6, phone-only: Bluetooth printing from the phone, on-device content pipeline, on-device rendering, exact-alarm schedules.
+- ✅ Phone-only app: on-device SQLite, feed fetching, AI summaries with fallback, Skia receipt renderer
+  (pixel-matches the Python output), BLE driver (byte-identical to the reference protocol), exact-alarm scheduled
+  prints, Material You UI. App test suite: 190 tests.
+- 🚧 In progress: AI-curated editions (Feed = what prints), performance and spacing polish.
+- 🧪 Being verified on real hardware: Bluetooth printing from the phone and scheduled prints in Doze (OnePlus, Android 16).
+- ✅ Python reference backend: ingest, enrichment, summaries, dedup, renderer, BLE printing from Linux (raw ATT for
+  dual-mode printers), REST API and scheduler. 359 tests.
 
 ## Credits
 - **[rbaron/catprinter](https://github.com/rbaron/catprinter)** by rbaron (MIT): the reverse-engineered BLE
