@@ -9,3 +9,4 @@ node_modules/
 .expo/
 mobile/android/
 mobile/ios/
+.claude/worktrees/
