@@ -28,8 +28,18 @@
         }
       ],
       "expo-image",
-      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }],
-      "@react-native-community/datetimepicker"
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "@react-native-community/datetimepicker",
+      "react-native-ble-plx",
+      "expo-sqlite",
+      "expo-secure-store"
     ],
     "experiments": {
       "reactCompiler": true
