@@ -65,3 +65,24 @@ export function withDarknessPattern(bitmap: ReceiptBitmap): ReceiptBitmap {
   for (let y = 50; y < 80; y += 3) for (let x = 6; x < W - 6; x += 3) rect(x, y, 1, 1); // dot grid
   return { width: 384, height: h, pixels };
 }
+
+/**
+ * Diagnostic strip (384 x 404) to tell print problems apart: six evenly spaced 8-row solid bands
+ * (banding / fading along the length), a 60-row 1px checkerboard (50% dots, dense data that can starve
+ * the printer), and ten 1px hairlines 4 rows apart (vertical streaks and fine detail).
+ */
+export function makeEvennessBitmap(): ReceiptBitmap {
+  const bands = 6;
+  const pitch = 56;
+  const checkerH = 60;
+  const lines = 10;
+  const h = bands * pitch + checkerH + lines * 4 + 16;
+  const pixels = new Uint8Array(W * h);
+  const fillRows = (y0: number, n: number) => pixels.fill(1, y0 * W, (y0 + n) * W);
+  let y = 0;
+  for (let i = 0; i < bands; i++, y += pitch) fillRows(y, 8);
+  for (let r = 0; r < checkerH; r++) for (let x = 0; x < W; x++) if ((x + r) % 2 === 0) pixels[(y + r) * W + x] = 1;
+  y += checkerH + 8;
+  for (let i = 0; i < lines; i++, y += 4) fillRows(y, 1);
+  return { width: 384, height: h, pixels };
+}

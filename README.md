@@ -90,14 +90,17 @@ How the protocol works:
 - Each row is 384 pixels = **48 bytes**, packed least-significant-bit first, 1 = burn (black).
   A row is sent either raw (`0xA2`) or run-length encoded (`0xBF`), whichever is shorter. Text-heavy
   receipts compress well.
-- The job is streamed in small chunks with a short pause between them, so the printer's buffer never overflows.
+- The job is streamed in small chunks with a short pause between them. The phone also honours the printer's
+  flow control: `51 78 AE 01 01 00 10 70 FF` on `0xAE02` means "buffer full, pause" and
+  `51 78 AE 01 01 00 00 00 FF` means "resume" (same bytes as the reference "ready"; it only counts as "job
+  done" once all data is sent). Writes stop while paused, with a 5 s safety timeout.
 
 Quirks of the **SC03h** that the reference doesn't cover (found on real hardware):
 
 - **Dual-mode device:** it advertises classic Bluetooth serial as well as BLE. On Linux, BlueZ picks the
   classic connection and fails with `ProfileUnavailable`. The Python driver therefore opens a raw
   BLE ATT socket (`att.py`). Android's BLE stack connects over LE directly.
-- It accepts a 247-byte MTU, but 244-byte writes stall the link. Chunks are capped at **100 bytes with 20 ms pacing**.
+- It accepts a 247-byte MTU, but 244-byte writes stall the link. Chunks are capped at **100 bytes (and MTU - 3) with 10 ms pacing**.
 - It never sends the reference "ready" notification. It only answers *get device state* (`0xA3`). Since a job
   starts and ends with that command, the **second `0xA3` reply** marks the job as finished.
 
@@ -114,7 +117,22 @@ Quirks of the **SC03h** that the reference doesn't cover (found on real hardware
 
 "Print darkness sample" prints a short sample with a solid bar, hairlines and a dot grid at the chosen level,
 so you can compare levels on paper. If prints are still too light: charge the printer (a low battery prints
-noticeably lighter) and use genuine thermal paper.
+noticeably lighter) and use genuine thermal paper. Each print logs its level, energy and speed
+(`[tnp] print level=... energy=... speed=...`) so you can confirm the saved level is the one used. The Light, Normal,
+Dark and Darkest presets also send `0xA9` ("update device", as NaitLee does) after apply-energy.
+
+### Troubleshooting uneven prints
+
+Settings > Printer > "Print evenness test" prints six evenly spaced solid bands, a 50% checkerboard and 1px
+hairlines. Read it like this:
+
+- **Horizontal light bands** (often where dense detail is): the data stream stalls and the motor stops and
+  restarts. Flow control and pacing address this; report it if it persists.
+- **Gradual fade down the strip:** low battery or a hot head. Charge the printer fully.
+- **Vertical streaks:** dirty print head. Clean it with isopropyl alcohol and a cotton swab.
+- **Patchy or blotchy areas:** paper. Use genuine thermal paper with the shiny side against the head, and keep the lid closed.
+
+To tell hardware from the phone, compare with the PC: `cd backend && uv run python -m tnp.print test`.
 
 ### 6. Scheduling
 You set one or more print times in the app (e.g. 08:00 "Morning edition"). At each time, even with the app closed
