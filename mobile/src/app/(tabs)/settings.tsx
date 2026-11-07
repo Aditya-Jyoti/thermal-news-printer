@@ -1,0 +1,57 @@
+import React, { useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
+import { Button, Divider, List, Snackbar } from 'react-native-paper';
+
+import { usePrintNow } from '@/api/hooks';
+import { isNotImplemented } from '@/api/errors';
+import { ConnectionSettings } from '@/components/ConnectionSettings';
+import { PrintingSettings } from '@/components/PrintingSettings';
+import { ScheduleList } from '@/components/ScheduleList';
+import { errorMessage } from '@/lib/format';
+
+export default function SettingsScreen() {
+  const printNow = usePrintNow();
+  const [toast, setToast] = useState<string | null>(null);
+
+  const onPrint = () =>
+    printNow.mutate(undefined, {
+      onSuccess: (r) => setToast(r.status === 'printed' ? `Printed ${r.items.length} items` : `Print ${r.status}`),
+      onError: (e) =>
+        setToast(isNotImplemented(e) ? 'Printing is not available on the backend yet (Phase 3).' : errorMessage(e)),
+    });
+
+  const onError = (e: unknown) => setToast(errorMessage(e));
+
+  return (
+    <View style={styles.flex}>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <View style={styles.print}>
+          <Button mode="contained" icon="printer" loading={printNow.isPending} disabled={printNow.isPending} onPress={onPrint}>
+            Print now
+          </Button>
+        </View>
+
+        <List.Subheader>Print schedule</List.Subheader>
+        <ScheduleList onError={onError} />
+        <Divider style={styles.div} />
+
+        <List.Subheader>Printing</List.Subheader>
+        <PrintingSettings onError={onError} onSaved={() => setToast('Saved')} />
+        <Divider style={styles.div} />
+
+        <List.Subheader>Connection</List.Subheader>
+        <ConnectionSettings onMessage={setToast} />
+      </ScrollView>
+      <Snackbar visible={toast !== null} onDismiss={() => setToast(null)} duration={4000}>
+        {toast ?? ''}
+      </Snackbar>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  flex: { flex: 1 },
+  scroll: { paddingBottom: 48 },
+  print: { padding: 16 },
+  div: { marginVertical: 12 },
+});
