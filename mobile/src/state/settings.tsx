@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-export const DEFAULT_BASE_URL = 'http://192.168.1.100:8000';
+export const DEFAULT_BASE_URL = 'http://localhost:8000';
 const KEY = 'tnp.appSettings.v1';
 
 interface Stored {
