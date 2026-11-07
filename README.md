@@ -259,8 +259,7 @@ docs/
 ## Status
 - ✅ Phone-only app: on-device SQLite, feed fetching, AI summaries with fallback, Skia receipt renderer
   (pixel-matches the Python output), BLE driver (byte-identical to the reference protocol), exact-alarm scheduled
-  prints, Material You UI. App test suite: 190 tests.
-- 🚧 In progress: AI-curated editions (Feed = what prints), performance and spacing polish.
+  prints, AI-curated editions (Feed = Preview = what prints), Material You UI. App test suite: 201 tests.
 - 🧪 Being verified on real hardware: Bluetooth printing from the phone and scheduled prints in Doze (OnePlus, Android 16).
 - ✅ Python reference backend: ingest, enrichment, summaries, dedup, renderer, BLE printing from Linux (raw ATT for
   dual-mode printers), REST API and scheduler. 359 tests.
